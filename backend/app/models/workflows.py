@@ -2,7 +2,7 @@ import uuid
 import enum
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Enum, JSON
+from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, Enum, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -59,14 +59,25 @@ class BusinessApproval(Base):
     integration_mode: Mapped[str] = mapped_column(String(50), default="PORTAL_HANDOFF", nullable=False)
     official_portal_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     
+    # Module 11 Fields: SLA & Bottleneck Engine
     sla_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     sla_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    sla_status: Mapped[str] = mapped_column(String(50), default="ON_TRACK", nullable=False)  # ON_TRACK, SLA_WARNING, SLA_BREACHED
+    sla_elapsed_percent: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    
+    # Module 10 Fields: Compliance & Renewal Engine
+    issue_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    expiry_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    renewal_start_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    renewal_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    renewal_status: Mapped[str] = mapped_column(String(50), default="UP_TO_DATE", nullable=False)  # UP_TO_DATE, RENEWAL_DUE, CRITICAL_RENEWAL, EXPIRED
+    renewal_reminder_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     
-    # Audit trail of stage transitions: [{"status": "OFFICIAL_PORTAL_HANDOFF", "timestamp": "...", "notes": "..."}]
+    # Audit trail of stage transitions
     stage_history: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     additional_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 

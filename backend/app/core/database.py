@@ -93,6 +93,8 @@ async def init_db():
     from app.models.rules import DocumentType, ApprovalRule
     from app.models.workflows import BusinessApproval
     from app.models.document import Document
+    from app.models.inspection import Inspection
+    from app.models.grievance import Grievance
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -107,6 +109,14 @@ async def init_db():
                 ("business_approvals", "submitted_at", "DATETIME"),
                 ("business_approvals", "stage_history", "JSON DEFAULT '[]'"),
                 ("business_approvals", "additional_metadata", "JSON DEFAULT '{}'"),
+                ("business_approvals", "issue_date", "DATETIME"),
+                ("business_approvals", "expiry_date", "DATETIME"),
+                ("business_approvals", "renewal_start_date", "DATETIME"),
+                ("business_approvals", "renewal_deadline", "DATETIME"),
+                ("business_approvals", "renewal_status", "VARCHAR(50) DEFAULT 'UP_TO_DATE'"),
+                ("business_approvals", "renewal_reminder_days", "INTEGER DEFAULT 30"),
+                ("business_approvals", "sla_status", "VARCHAR(50) DEFAULT 'ON_TRACK'"),
+                ("business_approvals", "sla_elapsed_percent", "FLOAT DEFAULT 0.0"),
             ]
             for table, col, col_type in new_columns:
                 try:
