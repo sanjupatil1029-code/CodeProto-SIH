@@ -1,0 +1,34 @@
+# Environment Variables (Secrets & Credentials)
+.env
+.env.*
+!.env.example
+*.env
+
+# Python & Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Databases & Local Uploads
+*.db
+*.sqlite
+*.sqlite3
+nirvaan.db
+data/uploads/
+
+# Node / Frontend Build Outputs
+node_modules/
+dist/
+build/
+.next/
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -243,8 +243,13 @@ export default function DocumentVault() {
             Local Privacy-First OCR, Magic Bytes Security Scanning &amp; Cross-Document Consistency Engine.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl bg-navy/5 p-2.5 text-xs font-semibold text-navy">
-          <ShieldCheck size={16} className="text-emerald-600" /> 100% Local Privacy-Conscious Architecture
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl bg-purple-50 border border-purple-200 p-2.5 text-xs font-semibold text-purple-900">
+            <Sparkles size={16} className="text-purple-600" /> Gemini AI Vision Assistant (DPDP Rule 8(3) Compliant)
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-navy/5 p-2.5 text-xs font-semibold text-navy">
+            <ShieldCheck size={16} className="text-emerald-600" /> Masked PII Protection
+          </div>
         </div>
       </div>
 

@@ -333,6 +333,76 @@ class DocumentService:
         return doc
 
     @classmethod
+    async def validate_document_with_ai(
+        cls,
+        db: AsyncSession,
+        document_id: uuid.UUID,
+        validation_rules: Optional[List[str]] = None
+    ) -> Tuple[Document, Dict[str, Any]]:
+        """
+        Validate document using Gemini AI Assistant (or local OCR fallback)
+        and trigger real-time Scheme Matcher update upon verification.
+        """
+        from app.services.gemini_validation_service import GeminiValidationService
+        from app.services.scheme_matcher_service import SchemeMatcherService
+        from app.services.business_service import BusinessService
+
+        doc = await cls.get_document_by_id(db, document_id)
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found"
+            )
+
+        file_bytes = StorageService.read_file(doc.storage_key)
+        
+        # Get business profile for consistency cross-checking
+        bus = await BusinessService.get_business_by_id(db, doc.business_id)
+        app_data = {
+            "company_name": bus.company_name if bus else None,
+            "business_type": bus.business_type if bus else None,
+            "district": bus.district if bus else None,
+            "state": bus.state if bus else None
+        }
+
+        report = await GeminiValidationService.validate_document(
+            file_bytes=file_bytes,
+            file_name=doc.file_name,
+            mime_type=doc.mime_type,
+            expected_document_type=doc.document_type,
+            validation_rules=validation_rules,
+            application_data=app_data
+        )
+
+        # Update Document DB Record based on AI validation result
+        ai_status = report.get("status", "NEEDS_REVIEW")
+        if ai_status == "VALID":
+            doc.verification_status = VerificationStatus.AUTO_VERIFIED
+            doc.verification_notes = f"Gemini AI Verified: {report.get('explanation')}"
+        else:
+            doc.verification_status = VerificationStatus.NEEDS_REVIEW
+            doc.verification_notes = f"Gemini AI Flagged: {report.get('explanation')}"
+
+        if not doc.extracted_data:
+            doc.extracted_data = {}
+        doc.extracted_data["ai_validation_report"] = report
+        doc.classification_confidence = report.get("confidence", doc.classification_confidence)
+        doc.updated_at = datetime.datetime.utcnow()
+
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+
+        # Trigger real-time Scheme Matcher update
+        try:
+            await SchemeMatcherService.match_schemes_for_business(db, doc.business_id)
+            logger.info(f"Scheme Matcher re-evaluated for business {doc.business_id} after AI document validation.")
+        except Exception as e:
+            logger.warning(f"Scheme Matcher update warning: {str(e)}")
+
+        return doc, report
+
+    @classmethod
     async def check_business_vault_compliance(
         cls, db: AsyncSession, business_id: uuid.UUID
     ) -> VaultComplianceStatusOut:

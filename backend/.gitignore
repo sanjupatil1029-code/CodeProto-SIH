@@ -1,0 +1,17 @@
+# Environment Variables
+.env
+.env.*
+!.env.example
+*.env
+
+# Python & Virtual Environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Databases & Uploads
+*.db
+*.sqlite
+nirvaan.db
+data/uploads/

@@ -427,3 +427,34 @@ async def validate_single_document(
         doc_id=doc.id
     )
 
+
+@router.post("/ai-validate/{document_id}")
+async def ai_validate_document(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Run Gemini AI Document Assistant validation with DPDP PII security compliance,
+    confidence scoring, and real-time Scheme Matcher update.
+    """
+    doc = await DocumentService.get_document_by_id(db, document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    business = await BusinessService.get_business_by_id(db, doc.business_id)
+    if business and business.owner_id != current_user.id and current_user.role not in [UserRole.OFFICER, UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+
+    doc, report = await DocumentService.validate_document_with_ai(db, document_id)
+    return {
+        "document": doc,
+        "ai_report": report
+    }
+

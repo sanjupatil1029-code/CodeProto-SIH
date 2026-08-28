@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  CalendarClock, FileCheck, Landmark, Link2, RefreshCw, ScrollText, ShieldAlert,
-  ClipboardCheck, Camera, CheckCircle2, AlertTriangle, Loader2, ChevronDown, FolderCheck,
-  ShieldCheck, AlertOctagon, HelpCircle, MessageSquarePlus, UserCheck, Flame, Send
+  CalendarClock, FileCheck, Landmark, ScrollText,
+  ClipboardCheck, CheckCircle2, Loader2,
+  AlertOctagon, MessageSquarePlus, Flame, Send, Upload, FileText, Check
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import StatusBadge from "../components/StatusBadge";
@@ -11,22 +11,19 @@ import { useApp } from "../context/AppContext";
 import { findApprovalById } from "../data/approvals";
 import type { DocumentRecord } from "../types";
 
-type RowState = { photo: string | null; validating: boolean };
-
 export default function ApprovalDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { profile, documents, addDocument, approvalRuntimes, markDocumentsReady, setApprovalStatus } = useApp();
+  const { documents, addDocument, approvalRuntimes, markDocumentsReady, setApprovalStatus } = useApp();
 
   const approval = id ? findApprovalById(id) : undefined;
 
-  const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
-  const [rows, setRows] = useState<Record<string, RowState>>({});
-  const [showRemainingOnly, setShowRemainingOnly] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeDocForUpload, setActiveDocForUpload] = useState<string | null>(null);
 
   // Module 12 Inspection State
-  const [inspection, setInspection] = useState({
+  const [inspection] = useState({
     scheduled: true,
     title: "On-Site Statutory Safety & Hygiene Inspection",
     officer: "Officer K. Sharma (State Inspector)",
@@ -41,31 +38,16 @@ export default function ApprovalDetails() {
     ]
   });
 
-  // Module 13 Grievance State
+  // Module 13 Grievance State - Start EMPTY so card only shows when a grievance is raised
   const [showGrievanceModal, setShowGrievanceModal] = useState(false);
-  const [grievances, setGrievances] = useState([
-    {
-      id: "grv-901",
-      title: "SLA Resolution Delay past 30-Day Window",
-      category: "SLA_BREACH",
-      priority: "HIGH",
-      status: "ESCALATED",
-      escalationLevel: 2,
-      escalationTitle: "Level 2: Regional Senior Inspector",
-      deadline: "2026-08-30 (Extended)",
-      assignedOfficer: "Regional Nodal Officer M. Patil",
-      history: [
-        { level: 1, action: "Grievance Ticket Created & Level 1 Nodal Assigned", date: "2026-08-20" },
-        { level: 2, action: "Automatic Multi-Tier Escalation: SLA Resolution Deadline Exceeded", date: "2026-08-28" }
-      ]
-    }
-  ]);
+  const [grievances, setGrievances] = useState<any[]>([]);
 
   const [newGrvTitle, setNewGrvTitle] = useState("");
   const [newGrvDesc, setNewGrvDesc] = useState("");
   const [newGrvPriority, setNewGrvPriority] = useState<"LOW" | "MEDIUM" | "HIGH" | "CRITICAL">("HIGH");
 
-  const vaultDocFor = (docName: string): DocumentRecord | undefined => documents.find((d) => d.name === docName);
+  const vaultDocFor = (docName: string): DocumentRecord | undefined =>
+    documents.find((d) => d.name.toLowerCase() === docName.toLowerCase() || d.usedFor.includes(approval?.id || ""));
 
   const docStatus = (docName: string): "verified" | "flagged" | "missing" => {
     const v = vaultDocFor(docName);
@@ -93,53 +75,39 @@ export default function ApprovalDetails() {
   }
 
   const status = runtime?.status || "not_started";
-  const dependsOnNames = approval.dependsOn
-    .map((depId) => findApprovalById(depId)?.name)
-    .filter(Boolean);
 
-  const openUpload = (docName: string) => {
-    setRows((prev) => ({
-      ...prev,
-      [docName]: prev[docName] || { photo: null, validating: false },
-    }));
-    setExpandedDoc(docName);
+  const triggerFileUpload = (docName: string) => {
+    setActiveDocForUpload(docName);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
   };
 
-  const handlePhotoChange = (docName: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setRows((prev) => ({ ...prev, [docName]: { ...prev[docName], photo: reader.result as string } }));
-    };
-    reader.readAsDataURL(file);
-  };
+    if (!file || !activeDocForUpload) return;
 
-  const updateRow = (docName: string, patch: Partial<RowState>) => {
-    setRows((prev) => ({ ...prev, [docName]: { ...prev[docName], ...patch } }));
-  };
+    setUploadingDoc(activeDocForUpload);
 
-  const validateAndSave = (docName: string) => {
-    const row = rows[docName];
-    if (!row?.photo) return;
-    updateRow(docName, { validating: true });
-
-    setTimeout(() => {
+    try {
       const doc: DocumentRecord = {
         id: `d-${Date.now()}`,
-        name: docName,
+        name: activeDocForUpload,
         status: "verified",
-        uploadedOn: "2026-08-28",
+        uploadedOn: new Date().toISOString().substring(0, 10),
         expiry: null,
         usedFor: [approval.id],
-        fileNameOnRecord: profile?.companyName || "—",
+        fileNameOnRecord: file.name,
         flags: [],
-        photoUrl: row.photo,
       };
-      addDocument(doc);
-      updateRow(docName, { validating: false, photo: null });
-      setExpandedDoc(null);
-    }, 700);
+      await addDocument(doc);
+    } catch (err) {
+      console.warn("Error uploading document:", err);
+    } finally {
+      setUploadingDoc(null);
+      setActiveDocForUpload(null);
+    }
   };
 
   const handleCreateGrievance = () => {
@@ -153,7 +121,7 @@ export default function ApprovalDetails() {
       escalationLevel: 1,
       escalationTitle: "Level 1: Nodal Officer Assigned",
       deadline: new Date(Date.now() + 48 * 3600 * 1000).toISOString().substring(0, 10),
-      assignedOfficer: "Assigned Nodal Officer",
+      assignedOfficer: "Assigned Nodal Officer M. Patil",
       history: [
         { level: 1, action: "Grievance Ticket Created", date: new Date().toISOString().substring(0, 10) }
       ]
@@ -164,10 +132,17 @@ export default function ApprovalDetails() {
     setShowGrievanceModal(false);
   };
 
-  const visibleDocs = showRemainingOnly ? requiredDocs.filter((d) => docStatus(d) !== "verified") : requiredDocs;
-
   return (
     <AppShell>
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelected}
+        accept=".pdf,.png,.jpg,.jpeg"
+        className="hidden"
+      />
+
       <button onClick={() => navigate("/roadmap")} className="text-sm font-semibold text-slate-soft hover:text-navy">
         ← Back to Roadmap
       </button>
@@ -238,7 +213,7 @@ export default function ApprovalDetails() {
         </div>
       )}
 
-      {/* Module 13: Active Grievances & Escalations */}
+      {/* Module 13: Active Grievances & Escalations - ONLY VISIBLE WHEN USER CREATES A GRIEVANCE */}
       {grievances.length > 0 && (
         <div className="mt-6 card p-6 border-l-4 border-l-rose-500 bg-rose-50/20 space-y-4">
           <div className="flex items-center justify-between">
@@ -276,6 +251,7 @@ export default function ApprovalDetails() {
             <p className="mt-2 text-sm leading-relaxed text-ink">{approval.why}</p>
           </div>
 
+          {/* REQUIRED DOCUMENTS WITH FILE UPLOAD BUTTONS */}
           <div className="card p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-slate-soft">
@@ -287,13 +263,53 @@ export default function ApprovalDetails() {
             </div>
 
             <ul className="mt-4 space-y-3">
-              {visibleDocs.map((docName) => {
+              {requiredDocs.map((docName) => {
                 const st = docStatus(docName);
+                const isUploading = uploadingDoc === docName;
+                const docRec = vaultDocFor(docName);
+
                 return (
-                  <li key={docName} className="rounded-lg border border-navy/[0.08] bg-mist/40 p-3.5 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      {st === "verified" ? <CheckCircle2 size={16} className="text-success" /> : <AlertTriangle size={16} className="text-warn" />}
-                      <span className="text-sm font-semibold text-ink">{docName}</span>
+                  <li key={docName} className="rounded-xl border border-navy/[0.08] bg-mist/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {st === "verified" ? (
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                          <Check size={18} />
+                        </span>
+                      ) : (
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                          <FileText size={18} />
+                        </span>
+                      )}
+                      <div>
+                        <p className="text-sm font-bold text-ink">{docName}</p>
+                        {docRec ? (
+                          <p className="text-xs text-emerald-700 font-medium">✓ Uploaded: {docRec.fileNameOnRecord}</p>
+                        ) : (
+                          <p className="text-xs text-amber-700 font-medium">Pending file upload</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {st === "verified" ? (
+                        <button
+                          onClick={() => triggerFileUpload(docName)}
+                          disabled={isUploading}
+                          className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5"
+                        >
+                          {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                          Replace File
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => triggerFileUpload(docName)}
+                          disabled={isUploading}
+                          className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5"
+                        >
+                          {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                          {isUploading ? "Uploading & Scanning..." : "Upload File"}
+                        </button>
+                      )}
                     </div>
                   </li>
                 );

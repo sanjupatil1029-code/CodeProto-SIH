@@ -178,7 +178,13 @@ export async function uploadDocument(payload: {
 export async function validateDocument(documentId: string, extractionData?: Record<string, any>) {
   return request<any>("/documents/validate", {
     method: "POST",
-    body: JSON.stringify({ document_id: documentId, mock_extracted_data: extractionData }),
+    body: JSON.stringify({ document_id: documentId, extracted_data: extractionData }),
+  });
+}
+
+export async function validateDocumentWithAI(documentId: string) {
+  return request<{ document: any; ai_report: any }>(`/documents/ai-validate/${documentId}`, {
+    method: "POST",
   });
 }
 

@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Document Storage
     UPLOAD_DIR: str = Field(default="data/uploads")
 
+    # Gemini AI API Configuration
+    GEMINI_API_KEY: Optional[str] = Field(default=None)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
