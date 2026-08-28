@@ -95,6 +95,8 @@ async def init_db():
     from app.models.document import Document
     from app.models.inspection import Inspection
     from app.models.grievance import Grievance
+    from app.models.scheme import Scheme
+    from app.models.regulatory_update import RegulatoryUpdate
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -117,6 +119,8 @@ async def init_db():
                 ("business_approvals", "renewal_reminder_days", "INTEGER DEFAULT 30"),
                 ("business_approvals", "sla_status", "VARCHAR(50) DEFAULT 'ON_TRACK'"),
                 ("business_approvals", "sla_elapsed_percent", "FLOAT DEFAULT 0.0"),
+                ("approval_rules", "rule_version", "VARCHAR(50) DEFAULT '1.0'"),
+                ("approval_rules", "is_latest", "BOOLEAN DEFAULT 1"),
             ]
             for table, col, col_type in new_columns:
                 try:
