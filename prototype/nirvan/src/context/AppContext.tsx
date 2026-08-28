@@ -7,34 +7,38 @@ import type {
   AlertRecord,
 } from "../types";
 import { getApplicableApprovals } from "../data/approvals";
+import * as api from "../services/api";
 
 interface User {
+  id?: string;
   name: string;
   email: string;
 }
 
 interface AppState {
   user: User | null;
-  login: (email: string, name?: string) => void;
+  login: (email: string, name?: string, password?: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
 
   category: "shop" | "industry" | null;
   setCategory: (c: "shop" | "industry" | null) => void;
 
   profile: ProjectProfile | null;
-  setProfile: (p: ProjectProfile) => void;
+  setProfile: (p: ProjectProfile) => Promise<void>;
 
   approvalRuntimes: Record<string, ApprovalRuntime>;
-  setApprovalStatus: (approvalId: string, status: ApprovalStatus) => void;
+  setApprovalStatus: (approvalId: string, status: ApprovalStatus) => Promise<void>;
   markDocumentsReady: (approvalId: string) => void;
 
   documents: DocumentRecord[];
-  addDocument: (doc: DocumentRecord) => void;
+  addDocument: (doc: DocumentRecord) => Promise<void>;
 
   alerts: AlertRecord[];
   markAlertRead: (id: string) => void;
 
   resetProject: () => void;
+  syncBackendState: () => Promise<void>;
 }
 
 const AppCtx = createContext<AppState | null>(null);
@@ -73,26 +77,6 @@ function seedAlerts(): AlertRecord[] {
       actionRequired: true,
       approvalId: "fire-noc",
     },
-    {
-      id: "a3",
-      severity: "medium",
-      title: "Inspection Scheduled",
-      message: "Factory Licence inspection scheduled for 02 Sep 2026, 11:00 AM.",
-      date: "2026-08-22",
-      read: false,
-      actionRequired: false,
-      approvalId: "factory-licence",
-    },
-    {
-      id: "a4",
-      severity: "medium",
-      title: "Renewal Due",
-      message: "Trade Licence expires in 30 days. Start renewal to avoid a compliance gap.",
-      date: "2026-08-20",
-      read: true,
-      actionRequired: true,
-      approvalId: "trade-license",
-    },
   ];
 }
 
@@ -110,8 +94,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      // Photos are kept in memory only — base64 images are too large for localStorage
-      // and were throwing a silent quota error that crashed the whole app.
       const lightDocuments = documents.map(({ photoUrl, ...rest }) => rest);
       localStorage.setItem(
         STORAGE_KEY,
@@ -122,13 +104,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, category, profile, approvalRuntimes, documents, alerts]);
 
-  const login = (email: string, name?: string) => {
+  const login = async (email: string, name?: string, password?: string) => {
+    try {
+      if (password) {
+        const res = await api.loginUser(email, password);
+        api.setToken(res.tokens.access_token);
+        setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name || email.split("@")[0] });
+        return;
+      }
+    } catch (err) {
+      console.warn("Backend login error, falling back to local session:", err);
+    }
     setUser({ email, name: name || email.split("@")[0] });
   };
-  const logout = () => setUser(null);
 
-  const setProfile = (p: ProjectProfile) => {
+  const register = async (email: string, password: string, name: string) => {
+    try {
+      const res = await api.registerUser(email, password, name);
+      api.setToken(res.tokens.access_token);
+      setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name });
+    } catch (err) {
+      console.warn("Backend register error, falling back to local session:", err);
+      setUser({ email, name });
+    }
+  };
+
+  const logout = () => {
+    api.removeToken();
+    setUser(null);
+  };
+
+  const syncBackendState = async () => {
+    if (!profile?.id) return;
+    try {
+      const roadmap = await api.getRoadmap(profile.id);
+      if (Array.isArray(roadmap) && roadmap.length > 0) {
+        const runtimes: Record<string, ApprovalRuntime> = {};
+        roadmap.forEach((r) => {
+          runtimes[r.rule_code || r.id] = {
+            approvalId: r.rule_code || r.id,
+            status: (r.status.toLowerCase() as ApprovalStatus) || "not_started",
+            progressDays: r.sla_elapsed_percent || 0,
+            documentsReady: r.status === "READY" || r.status === "APPROVED",
+          };
+        });
+        setApprovalRuntimes(runtimes);
+      }
+    } catch (err) {
+      console.warn("Failed to sync backend state:", err);
+    }
+  };
+
+  const setProfile = async (p: ProjectProfile) => {
     setProfileState(p);
+    
+    // Attempt backend sync
+    try {
+      const backendBiz = await api.createBusiness({
+        name: p.companyName,
+        sector: p.sector || (category === "shop" ? "JEWELLERY_SHOP" : "SUGAR_FACTORY"),
+        state: p.location.split(",")[0] || "Maharashtra",
+        district: p.location.split(",")[1] || "Pune",
+        investment_amount: p.investmentAmount,
+        employee_count: p.employees,
+        expected_turnover: p.expectedTurnover,
+        premises_type: p.premisesType,
+      });
+
+      if (backendBiz?.id) {
+        p.id = backendBiz.id;
+        setProfileState({ ...p, id: backendBiz.id });
+        const roadmap = await api.generateRoadmap(backendBiz.id);
+        const runtimes: Record<string, ApprovalRuntime> = {};
+        roadmap.forEach((r, idx) => {
+          runtimes[r.rule_code || r.id] = {
+            approvalId: r.rule_code || r.id,
+            status: (r.status.toLowerCase() as ApprovalStatus) || "not_started",
+            progressDays: 0,
+            documentsReady: false,
+          };
+        });
+        setApprovalRuntimes(runtimes);
+        return;
+      }
+    } catch (err) {
+      console.warn("Backend business creation fallback to local roadmap generator:", err);
+    }
+
+    // Local fallback
     const applicable = getApplicableApprovals(p);
     const runtimes: Record<string, ApprovalRuntime> = {};
     applicable.forEach((a, idx) => {
@@ -143,7 +206,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     setApprovalRuntimes(runtimes);
-    // seed a couple of vault documents relevant to biz-reg
     setDocuments([
       {
         id: "d1",
@@ -155,20 +217,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fileNameOnRecord: p.companyName,
         flags: [],
       },
-      {
-        id: "d2",
-        name: "GST Certificate",
-        status: "verified",
-        uploadedOn: "2026-08-20",
-        expiry: null,
-        usedFor: ["gst-reg"],
-        fileNameOnRecord: p.companyName,
-        flags: [],
-      },
     ]);
   };
 
-  const setApprovalStatus = (approvalId: string, status: ApprovalStatus) => {
+  const setApprovalStatus = async (approvalId: string, status: ApprovalStatus) => {
     setApprovalRuntimes((prev) => ({
       ...prev,
       [approvalId]: {
@@ -176,6 +228,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         status,
       },
     }));
+
+    try {
+      await api.updateApprovalStatus(approvalId, status.toUpperCase());
+    } catch (err) {
+      console.warn("Failed to update status on backend:", err);
+    }
   };
 
   const markDocumentsReady = (approvalId: string) => {
@@ -189,8 +247,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const addDocument = (doc: DocumentRecord) => {
+  const addDocument = async (doc: DocumentRecord) => {
     setDocuments((prev) => [doc, ...prev]);
+
+    if (profile?.id) {
+      try {
+        const uploaded = await api.uploadDocument({
+          business_id: profile.id,
+          document_type: doc.name.toUpperCase().replace(/\s+/g, "_"),
+          file_name: doc.name,
+        });
+        if (uploaded?.id) {
+          await api.validateDocument(uploaded.id, { company_name: profile.companyName });
+        }
+      } catch (err) {
+        console.warn("Backend document upload fallback:", err);
+      }
+    }
   };
 
   const markAlertRead = (id: string) => {
@@ -208,6 +281,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       login,
+      register,
       logout,
       category,
       setCategory,
@@ -221,6 +295,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       alerts,
       markAlertRead,
       resetProject,
+      syncBackendState,
     }),
     [user, category, profile, approvalRuntimes, documents, alerts]
   );
