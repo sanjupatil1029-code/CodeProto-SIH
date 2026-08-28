@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-mist text-ink font-body antialiased;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  @apply font-display;
+}
+
+::selection {
+  background: #E9E7FF;
+}
+
+/* thin scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C7CCE4; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #A7AED6; }
+
+@layer utilities {
+  .card {
+    @apply bg-white rounded-xl2 border border-navy/[0.06] shadow-card;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-navy text-white font-semibold px-5 py-2.5 shadow-card hover:bg-navy-dark transition-colors duration-150;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white text-navy font-semibold px-5 py-2.5 border border-navy/15 hover:bg-lavender/50 transition-colors duration-150;
+  }
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-saffron text-white font-semibold px-5 py-2.5 shadow-card hover:bg-saffron-dark transition-colors duration-150;
+  }
+  .input-field {
+    @apply w-full rounded-lg border border-navy/15 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-soft/70 focus:outline-none focus:ring-2 focus:ring-indigo/40 focus:border-indigo transition;
+  }
+  .label-text {
+    @apply block text-xs font-semibold uppercase tracking-wide text-slate-soft mb-1.5;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+}
