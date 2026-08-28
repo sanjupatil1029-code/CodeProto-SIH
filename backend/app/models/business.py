@@ -24,6 +24,8 @@ class Business(Base):
     employee_count: Mapped[int] = mapped_column(Integer, nullable=False)
     expected_turnover: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
     operational_stage: Mapped[str] = mapped_column(String(50), nullable=False)  # e.g., 'PLANNED', 'REGISTERED', 'OPERATIONAL'
+    ownership_type: Mapped[str] = mapped_column(String(50), nullable=False, default="PRIVATE_LIMITED")  # e.g., 'PROPRIETORSHIP', 'PRIVATE_LIMITED', 'LLP'
+    premises_type: Mapped[str] = mapped_column(String(50), nullable=False, default="RENTED")  # e.g., 'OWNED', 'RENTED', 'LEASED', 'MIDC_PLOT'
     
     # JSON column for dynamic, sector-specific attributes (e.g. food business specific answers)
     flexible_attributes: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)

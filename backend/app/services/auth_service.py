@@ -151,6 +151,18 @@ class AuthService:
             role=user.role
         )
 
+    @classmethod
+    async def logout_user(cls, db: AsyncSession, refresh_token_str: str) -> None:
+        """Revoke a refresh token on logout."""
+        result = await db.execute(
+            select(RefreshToken).where(RefreshToken.token == refresh_token_str)
+        )
+        db_token = result.scalars().first()
+        if db_token:
+            db_token.is_revoked = True
+            await db.commit()
+            logger.info("Successfully revoked refresh token on logout.")
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),

@@ -45,6 +45,8 @@ class BusinessService:
             employee_count=schema.employee_count,
             expected_turnover=schema.expected_turnover,
             operational_stage=schema.operational_stage,
+            ownership_type=schema.ownership_type,
+            premises_type=schema.premises_type,
             flexible_attributes=schema.flexible_attributes
         )
         db.add(new_business)

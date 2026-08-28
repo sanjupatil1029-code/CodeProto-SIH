@@ -15,6 +15,8 @@ class BusinessBase(BaseModel):
     employee_count: int = Field(..., gt=0, examples=[45])
     expected_turnover: float = Field(..., gt=0, description="Expected annual turnover in INR", examples=[35000000.00])
     operational_stage: str = Field(..., examples=["PLANNED"])  # e.g., PLANNED, REGISTERED, OPERATIONAL
+    ownership_type: str = Field(default="PRIVATE_LIMITED", examples=["PRIVATE_LIMITED"])  # e.g. PROPRIETORSHIP, PRIVATE_LIMITED, LLP, PARTNERSHIP
+    premises_type: str = Field(default="RENTED", examples=["RENTED"])  # e.g. OWNED, RENTED, LEASED, MIDC_PLOT
     flexible_attributes: Dict[str, Any] = Field(default_factory=dict, description="Custom sector-specific parameters")
 
 
@@ -33,6 +35,8 @@ class BusinessUpdate(BaseModel):
     employee_count: Optional[int] = Field(None, gt=0)
     expected_turnover: Optional[float] = Field(None, gt=0)
     operational_stage: Optional[str] = None
+    ownership_type: Optional[str] = None
+    premises_type: Optional[str] = None
     flexible_attributes: Optional[Dict[str, Any]] = None
 
 

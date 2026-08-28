@@ -90,8 +90,14 @@ async def init_db():
     # Import all models to ensure they are registered with Base.metadata
     from app.models.auth import User, RefreshToken
     from app.models.business import Business
+    from app.models.rules import DocumentType, ApprovalRule
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables initialized/verified.")
+
+    # Seed default document types and approval rules
+    from app.services.rule_engine_service import RuleEngineService
+    async with SessionLocal() as session:
+        await RuleEngineService.seed_default_rules(session)
 

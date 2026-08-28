@@ -27,3 +27,10 @@ async def login(
 async def refresh(schema: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
     """Refresh access token using a valid, non-revoked refresh token."""
     return await AuthService.refresh_tokens(db, schema.refresh_token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(schema: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+    """Revoke user's refresh token on logout."""
+    await AuthService.logout_user(db, schema.refresh_token)
+    return None

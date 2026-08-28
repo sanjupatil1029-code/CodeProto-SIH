@@ -1,0 +1,13 @@
+How to Run locally
+1. Startup the Application
+To run the main FastAPI server:
+
+powershell
+
+cd e:\CodeProto-SIH\backend
+.venv\Scripts\uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+2. Verify with API Docs
+Navigate to:
+
+Interactive OpenAPI docs: http://127.0.0.1:8000/docs
+Alternative Redoc: http://127.0.0.1:8000/redoc
