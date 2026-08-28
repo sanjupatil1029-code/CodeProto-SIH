@@ -10,6 +10,8 @@ from app.api.v1.inspections import router as inspections_router
 from app.api.v1.grievances import router as grievances_router
 from app.api.v1.schemes import router as schemes_router
 from app.api.v1.regulations import router as regulations_router
+from app.api.v1.notifications import router as notifications_router
+from app.api.v1.admin import router as admin_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -23,3 +25,5 @@ api_router.include_router(inspections_router)
 api_router.include_router(grievances_router)
 api_router.include_router(schemes_router)
 api_router.include_router(regulations_router)
+api_router.include_router(notifications_router)
+api_router.include_router(admin_router)

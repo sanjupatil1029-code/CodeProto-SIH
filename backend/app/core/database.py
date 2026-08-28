@@ -97,6 +97,8 @@ async def init_db():
     from app.models.grievance import Grievance
     from app.models.scheme import Scheme
     from app.models.regulatory_update import RegulatoryUpdate
+    from app.models.notification import Notification
+    from app.models.audit_log import AuditLog
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
