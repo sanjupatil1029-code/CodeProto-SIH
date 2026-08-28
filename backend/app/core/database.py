@@ -96,6 +96,23 @@ async def init_db():
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Handle SQLite column additions for dev db
+        if is_sqlite or "sqlite" in str(engine.url):
+            new_columns = [
+                ("business_approvals", "workflow_id", "VARCHAR(36)"),
+                ("business_approvals", "external_system", "VARCHAR(100)"),
+                ("business_approvals", "external_reference_id", "VARCHAR(100)"),
+                ("business_approvals", "integration_mode", "VARCHAR(50) DEFAULT 'PORTAL_HANDOFF'"),
+                ("business_approvals", "official_portal_url", "VARCHAR(500)"),
+                ("business_approvals", "submitted_at", "DATETIME"),
+                ("business_approvals", "stage_history", "JSON DEFAULT '[]'"),
+                ("business_approvals", "additional_metadata", "JSON DEFAULT '{}'"),
+            ]
+            for table, col, col_type in new_columns:
+                try:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                except Exception:
+                    pass
     logger.info("Database tables initialized/verified.")
 
     # Seed default document types and approval rules

@@ -1,11 +1,18 @@
 import uuid
-from typing import List
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.auth import User, UserRole
-from app.schemas.workflows import BusinessApprovalOut, StatusUpdateSchema
+from app.schemas.workflows import (
+    BusinessApprovalOut,
+    StatusUpdateSchema,
+    WorkflowHandoffResponse,
+    WorkflowSubmitResponse,
+    AdapterStatusSyncResponse,
+)
+from app.adapters.factory import AdapterFactory
 from app.services.auth_service import get_current_user
 from app.services.workflow_service import WorkflowService
 from app.services.business_service import BusinessService
@@ -80,7 +87,7 @@ async def update_approval_status(
 ):
     """
     Update status of a specific approval record in the roadmap.
-    - Entrepreneurs: Can only update status from READY/NOT_STARTED -> IN_PROGRESS for their own business.
+    - Entrepreneurs: Can update status for their own business.
     - Officers/Admins: Can transition to any status.
     """
     return await WorkflowService.update_approval_status(
@@ -90,3 +97,55 @@ async def update_approval_status(
         role=current_user.role,
         target_status=schema.status
     )
+
+
+@router.post("/approvals/{approval_id}/handoff", response_model=WorkflowHandoffResponse)
+async def initiate_portal_handoff(
+    approval_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Module 8 & 9: Initiate Official Government Portal Handoff.
+    Marks status as OFFICIAL_PORTAL_HANDOFF and returns official portal URL (e.g., FoSCoS, GST, MAITRI).
+    """
+    return await WorkflowService.initiate_portal_handoff(
+        db=db, approval_id=approval_id, user_id=current_user.id
+    )
+
+
+@router.post("/approvals/{approval_id}/submit", response_model=WorkflowSubmitResponse)
+async def submit_application(
+    approval_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Module 8 & 9: Submit application through Government Integration Adapter Layer.
+    Generates external reference ID (e.g. FSSAI123456), calculates SLA deadline, and records internal workflow.
+    """
+    return await WorkflowService.submit_workflow_application(
+        db=db, approval_id=approval_id, user_id=current_user.id
+    )
+
+
+@router.post("/approvals/{approval_id}/sync-status", response_model=AdapterStatusSyncResponse)
+async def sync_external_status(
+    approval_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Module 8 & 9: Sync application status from external government system / adapter.
+    """
+    return await WorkflowService.sync_external_status(
+        db=db, approval_id=approval_id, user_id=current_user.id
+    )
+
+
+@router.get("/adapters/list", response_model=Dict[str, Any])
+async def list_government_adapters():
+    """
+    Module 9: List registered Government Integration Adapters, their integration modes, and official portal URLs.
+    """
+    return AdapterFactory.list_registered_adapters()
