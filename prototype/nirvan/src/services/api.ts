@@ -23,14 +23,27 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new Error("Unable to connect to NIRVAAN backend server. Please ensure the backend is running on http://localhost:8000.");
+  }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: "Network response was not ok" }));
-    throw new Error(errorData.detail || `Request failed with status ${response.status}`);
+    const errorData = await response.json().catch(() => ({ detail: "Network error." }));
+    let errorMsg = "Request failed";
+    if (typeof errorData.detail === "string") {
+      errorMsg = errorData.detail;
+    } else if (Array.isArray(errorData.detail)) {
+      errorMsg = errorData.detail.map((e: any) => e.msg || (typeof e === "string" ? e : JSON.stringify(e))).join("; ");
+    } else if (errorData.detail) {
+      errorMsg = typeof errorData.detail === "object" ? JSON.stringify(errorData.detail) : String(errorData.detail);
+    }
+    throw new Error(errorMsg);
   }
 
   return response.json();
@@ -40,17 +53,50 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 // 1. AUTH API
 // ----------------------------------------------------
 export async function registerUser(email: string, password: string, fullName: string) {
-  return request<{ user: any; tokens: { access_token: string } }>("/auth/register", {
+  return request<{ id: string; email: string; full_name: string; role: string }>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, full_name: fullName }),
   });
 }
 
 export async function loginUser(email: string, password: string) {
-  return request<{ user: any; tokens: { access_token: string } }>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
+  const body = new URLSearchParams();
+  body.append("username", email);
+  body.append("password", password);
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    });
+  } catch {
+    throw new Error("Unable to connect to NIRVAAN backend server. Please ensure the backend is running on http://localhost:8000.");
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: "Invalid email or password" }));
+    let errorMsg = "Incorrect email or password. If you don't have an account, please sign up.";
+    if (typeof errorData.detail === "string") {
+      errorMsg = errorData.detail;
+    } else if (Array.isArray(errorData.detail)) {
+      errorMsg = errorData.detail.map((e: any) => e.msg || (typeof e === "string" ? e : JSON.stringify(e))).join("; ");
+    }
+    throw new Error(errorMsg);
+  }
+
+  const data = await response.json();
+  return {
+    tokens: { access_token: data.access_token },
+    user: { id: data.user_id, email, full_name: data.full_name || email.split("@")[0] },
+  };
+}
+
+export async function getCurrentUser() {
+  return request<{ id: string; email: string; full_name?: string; role: string }>("/auth/me");
 }
 
 // ----------------------------------------------------

@@ -105,6 +105,7 @@ async def init_db():
         # Handle SQLite column additions for dev db
         if is_sqlite or "sqlite" in str(engine.url):
             new_columns = [
+                ("users", "full_name", "VARCHAR(255)"),
                 ("business_approvals", "workflow_id", "VARCHAR(36)"),
                 ("business_approvals", "external_system", "VARCHAR(100)"),
                 ("business_approvals", "external_reference_id", "VARCHAR(100)"),

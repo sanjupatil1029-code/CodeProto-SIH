@@ -108,21 +108,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (password) {
       const res = await api.loginUser(email, password);
       api.setToken(res.tokens.access_token);
-      setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name || email.split("@")[0] });
+      
+      // Clear stale mock project profiles from previous local sessions
+      setCategory(null);
+      setProfileState(null);
+      setApprovalRuntimes({});
+      setDocuments([]);
+
+      try {
+        const me = await api.getCurrentUser();
+        setUser({ id: me.id, email: me.email, name: me.full_name || res.user.full_name || name || email.split("@")[0] });
+      } catch {
+        setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name || email.split("@")[0] });
+      }
       return;
     }
     setUser({ email, name: name || email.split("@")[0] });
   };
 
   const register = async (email: string, password: string, name: string) => {
-    const res = await api.registerUser(email, password, name);
-    api.setToken(res.tokens.access_token);
-    setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name });
+    await api.registerUser(email, password, name);
   };
 
   const logout = () => {
     api.removeToken();
     setUser(null);
+    setCategory(null);
+    setProfileState(null);
+    setApprovalRuntimes({});
+    setDocuments([]);
   };
 
   const syncBackendState = async () => {
@@ -151,23 +165,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     
     // Attempt backend sync
     try {
+      const locStr = p.location || `${p.state},${p.district}`;
+      const parts = locStr.split(",");
       const backendBiz = await api.createBusiness({
         name: p.companyName,
         sector: p.sector || (category === "shop" ? "JEWELLERY_SHOP" : "SUGAR_FACTORY"),
-        state: p.location.split(",")[0] || "Maharashtra",
-        district: p.location.split(",")[1] || "Pune",
-        investment_amount: p.investmentAmount,
+        state: parts[0] || p.state || "Maharashtra",
+        district: parts[1] || p.district || "Pune",
+        investment_amount: p.investmentAmount ?? 10000000,
         employee_count: p.employees,
-        expected_turnover: p.expectedTurnover,
-        premises_type: p.premisesType,
+        expected_turnover: p.expectedTurnover ?? 25000000,
+        premises_type: p.premisesType || "MIDC_PLOT",
       });
 
       if (backendBiz?.id) {
-        p.id = backendBiz.id;
         setProfileState({ ...p, id: backendBiz.id });
         const roadmap = await api.generateRoadmap(backendBiz.id);
         const runtimes: Record<string, ApprovalRuntime> = {};
-        roadmap.forEach((r, idx) => {
+        roadmap.forEach((r) => {
           runtimes[r.rule_code || r.id] = {
             approvalId: r.rule_code || r.id,
             status: (r.status.toLowerCase() as ApprovalStatus) || "not_started",

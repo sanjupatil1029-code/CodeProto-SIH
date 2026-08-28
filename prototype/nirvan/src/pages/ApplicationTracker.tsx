@@ -2,22 +2,15 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ExternalLink,
-  ChevronRight,
-  RotateCcw,
-  CheckCircle2,
-  Clock,
   Globe,
   Layers,
   Sparkles,
-  ShieldCheck,
   Send,
   Building2,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
-import StatusBadge from "../components/StatusBadge";
 import Timeline from "../components/Timeline";
 import { useApp } from "../context/AppContext";
-import { getApplicableApprovals } from "../data/approvals";
 
 interface ExtendedWorkflowRecord {
   id: string;

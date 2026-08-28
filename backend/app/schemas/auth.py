@@ -8,6 +8,7 @@ from app.models.auth import UserRole
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=50)
+    full_name: Optional[str] = None
     role: UserRole = UserRole.ENTREPRENEUR
 
 
@@ -19,6 +20,7 @@ class UserLogin(BaseModel):
 class UserOut(BaseModel):
     id: uuid.UUID
     email: EmailStr
+    full_name: Optional[str] = None
     role: UserRole
     is_active: bool
     created_at: datetime
@@ -32,6 +34,7 @@ class Token(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     role: UserRole
+    full_name: Optional[str] = None
 
 
 class TokenData(BaseModel):

@@ -3,7 +3,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.schemas.auth import UserRegister, UserOut, Token, RefreshTokenRequest
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, get_current_user
+from app.models.auth import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -21,6 +22,12 @@ async def login(
 ):
     """Log in using email (as username) and password to get JWT access and refresh tokens."""
     return await AuthService.authenticate_user(db, form_data.username, form_data.password)
+
+
+@router.get("/me", response_model=UserOut)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Get profile of current authenticated user."""
+    return current_user
 
 
 @router.post("/refresh", response_model=Token)

@@ -12,14 +12,21 @@ export type BusinessSize = "Small" | "Medium" | "Large";
 export type ProjectType = "New Setup" | "Expansion" | "Renewal";
 
 export interface ProjectProfile {
+  id?: string;
   companyName: string;
   businessTypeId: string;
+  sector?: string;
   state: string;
   district: string;
   cityTaluk: string;
+  city?: string;
+  location?: string;
   size: BusinessSize;
   projectType: ProjectType;
   employees: number;
+  investmentAmount?: number;
+  expectedTurnover?: number;
+  premisesType?: string;
   activity: string;
 }
 

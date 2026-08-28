@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Compass, LogIn, Sparkles, Loader2 } from "lucide-react";
+import { Compass, LogIn, Loader2 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 export default function Login() {
@@ -29,26 +29,6 @@ export default function Login() {
     }
   };
 
-  const handleDemo = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      await login("demo_entrepreneur@nirvaan.gov.in", "Demo Entrepreneur", "Password123!");
-      navigate("/dashboard");
-    } catch (err) {
-      // If demo user doesn't exist on DB, attempt auto-signup
-      try {
-        const { register } = useApp() as any;
-        await register("demo_entrepreneur@nirvaan.gov.in", "Password123!", "Demo Entrepreneur");
-        navigate("/dashboard");
-      } catch {
-        setError("Could not complete demo login. Please try creating a new account.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-hero-grid [background-size:22px_22px] bg-mist px-4">
       <div className="w-full max-w-md">
@@ -61,7 +41,7 @@ export default function Login() {
 
         <div className="card p-8">
           <h1 className="font-display text-2xl font-bold text-ink">Welcome Back</h1>
-          <p className="mt-1 text-sm text-slate-soft">Log in to authenticate with NIRVAAN Backend API.</p>
+          <p className="mt-1 text-sm text-slate-soft">Log in to continue your compliance journey.</p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
@@ -93,17 +73,9 @@ export default function Login() {
             )}
             <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-              {loading ? "Authenticating with Backend..." : "Login"}
+              {loading ? "Logging in..." : "Login"}
             </button>
           </form>
-
-          <button
-            onClick={handleDemo}
-            disabled={loading}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-saffron/50 bg-saffron/5 px-5 py-2.5 text-sm font-semibold text-saffron-dark hover:bg-saffron/10 disabled:opacity-50"
-          >
-            <Sparkles size={15} /> Continue with Demo Account
-          </button>
 
           <p className="mt-6 text-center text-sm text-slate-soft">
             New to NIRVAAN?{" "}

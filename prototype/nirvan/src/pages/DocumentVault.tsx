@@ -133,7 +133,7 @@ export default function DocumentVault() {
       type: "ADDRESS_MISMATCH",
       severity: "CRITICAL",
       title: "Address Mismatch between Business Profile & Rental Agreement",
-      expected: `${profile?.city || "Pune"}, ${profile?.state || "Maharashtra"} (Business Profile)`,
+      expected: `${profile?.cityTaluk || profile?.city || "Pune"}, ${profile?.state || "Maharashtra"} (Business Profile)`,
       actual: "Bandra Kurla Complex, Mumbai (Rental Agreement)",
       affectedApprovals: ["FSSAI_LICENSE", "FIRE_SAFETY_NOC", "WATER_CONSENT", "LOCAL_MUNICIPAL_NOC"],
     },

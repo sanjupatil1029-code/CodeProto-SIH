@@ -10,7 +10,7 @@ export default function HomeDashboard() {
   return (
     <AppShell hideProfileBar>
       <h1 className="font-display text-3xl font-extrabold tracking-tight text-navy">
-        Welcome to NIRVAAN{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
+        Welcome to NIRVAAN{user?.name ? `, ${user.name}` : ""}
       </h1>
       <p className="mt-1.5 text-sm text-slate-soft">
         Choose your business category to begin your approval journey.

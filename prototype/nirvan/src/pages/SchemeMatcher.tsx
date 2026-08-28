@@ -2,18 +2,15 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Award,
-  CheckCircle2,
-  FileText,
-  Gift,
-  ListChecks,
-  ExternalLink,
-  GitCommit,
-  Sparkles,
   History,
+  Sparkles,
+  Gift,
   Layers,
-  IndianRupee,
   Building2,
+  ListChecks,
+  CheckCircle2,
   FileCheck,
+  ExternalLink,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { useApp } from "../context/AppContext";
@@ -195,7 +192,7 @@ export default function SchemeMatcher() {
                 ₹{(totalBenefit / 100000).toFixed(2)} Lakhs
               </p>
               <p className="text-xs text-slate-soft mt-0.5">
-                {schemes.length} Government Schemes matched for {profile.companyName} ({profile.sector}).
+                {schemes.length} Government Schemes matched for {profile.companyName} ({profile.sector || profile.businessTypeId}).
               </p>
             </div>
             <button className="btn-primary !bg-emerald-600 hover:!bg-emerald-700 text-xs">

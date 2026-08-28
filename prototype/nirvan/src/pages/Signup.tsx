@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Compass, UserPlus, Loader2 } from "lucide-react";
+import { Compass, UserPlus, Loader2, CheckCircle2 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 export default function Signup() {
@@ -8,6 +8,7 @@ export default function Signup() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", confirm: "" });
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   const update = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -28,10 +29,14 @@ export default function Signup() {
     }
 
     setError("");
+    setSuccess("");
     setLoading(true);
     try {
       await register(form.email, form.password, form.name);
-      navigate("/dashboard");
+      setSuccess("Account created successfully! Redirecting to login page in 3 seconds...");
+      setTimeout(() => {
+        navigate("/login");
+      }, 3000);
     } catch (err: any) {
       setError(err.message || "Registration failed. This email may already be registered.");
     } finally {
@@ -51,29 +56,37 @@ export default function Signup() {
 
         <div className="card p-8">
           <h1 className="font-display text-2xl font-bold text-ink">Create your NIRVAAN account</h1>
-          <p className="mt-1 text-sm text-slate-soft">Sign up to register with backend database.</p>
+          <p className="mt-1 text-sm text-slate-soft">Start your guided compliance journey in minutes.</p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
               <label className="label-text">Full Name *</label>
-              <input required className="input-field" placeholder="Rahul Sharma" value={form.name} onChange={(e) => update("name", e.target.value)} />
+              <input required disabled={!!success} className="input-field disabled:opacity-60" placeholder="Rahul Sharma" value={form.name} onChange={(e) => update("name", e.target.value)} />
             </div>
             <div>
               <label className="label-text">Email Address *</label>
-              <input required type="email" className="input-field" placeholder="you@company.com" value={form.email} onChange={(e) => update("email", e.target.value)} />
+              <input required disabled={!!success} type="email" className="input-field disabled:opacity-60" placeholder="you@company.com" value={form.email} onChange={(e) => update("email", e.target.value)} />
             </div>
             <div>
               <label className="label-text">Phone Number</label>
-              <input className="input-field" placeholder="98765 43210" value={form.phone} onChange={(e) => update("phone", e.target.value)} />
+              <input
+                disabled={!!success}
+                type="tel"
+                maxLength={10}
+                className="input-field disabled:opacity-60"
+                placeholder="9876543210"
+                value={form.phone}
+                onChange={(e) => update("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label-text">Password *</label>
-                <input required type="password" className="input-field" placeholder="••••••••" value={form.password} onChange={(e) => update("password", e.target.value)} />
+                <input required disabled={!!success} type="password" className="input-field disabled:opacity-60" placeholder="••••••••" value={form.password} onChange={(e) => update("password", e.target.value)} />
               </div>
               <div>
                 <label className="label-text">Confirm Password *</label>
-                <input required type="password" className="input-field" placeholder="••••••••" value={form.confirm} onChange={(e) => update("confirm", e.target.value)} />
+                <input required disabled={!!success} type="password" className="input-field disabled:opacity-60" placeholder="••••••••" value={form.confirm} onChange={(e) => update("confirm", e.target.value)} />
               </div>
             </div>
             {error && (
@@ -81,9 +94,15 @@ export default function Signup() {
                 {error}
               </div>
             )}
-            <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
+            {success && (
+              <div className="rounded-lg bg-emerald-50 p-3.5 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0" />
+                <span>{success}</span>
+              </div>
+            )}
+            <button type="submit" disabled={loading || !!success} className="btn-primary w-full disabled:opacity-50">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
-              {loading ? "Creating Account on Backend..." : "Create Account"}
+              {loading ? "Creating Account..." : "Create Account"}
             </button>
           </form>
 

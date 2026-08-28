@@ -41,6 +41,7 @@ class AuthService:
         hashed_password = security.get_password_hash(schema.password)
         new_user = User(
             email=schema.email,
+            full_name=schema.full_name,
             hashed_password=hashed_password,
             role=schema.role
         )
@@ -57,7 +58,7 @@ class AuthService:
         if not user or not security.verify_password(password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
+                detail="Incorrect email or password. If you don't have an account, please sign up.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -87,7 +88,8 @@ class AuthService:
         return Token(
             access_token=access_token,
             refresh_token=refresh_token_str,
-            role=user.role
+            role=user.role,
+            full_name=user.full_name
         )
 
     @classmethod
