@@ -105,28 +105,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [user, category, profile, approvalRuntimes, documents, alerts]);
 
   const login = async (email: string, name?: string, password?: string) => {
-    try {
-      if (password) {
-        const res = await api.loginUser(email, password);
-        api.setToken(res.tokens.access_token);
-        setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name || email.split("@")[0] });
-        return;
-      }
-    } catch (err) {
-      console.warn("Backend login error, falling back to local session:", err);
+    if (password) {
+      const res = await api.loginUser(email, password);
+      api.setToken(res.tokens.access_token);
+      setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name || email.split("@")[0] });
+      return;
     }
     setUser({ email, name: name || email.split("@")[0] });
   };
 
   const register = async (email: string, password: string, name: string) => {
-    try {
-      const res = await api.registerUser(email, password, name);
-      api.setToken(res.tokens.access_token);
-      setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name });
-    } catch (err) {
-      console.warn("Backend register error, falling back to local session:", err);
-      setUser({ email, name });
-    }
+    const res = await api.registerUser(email, password, name);
+    api.setToken(res.tokens.access_token);
+    setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name });
   };
 
   const logout = () => {

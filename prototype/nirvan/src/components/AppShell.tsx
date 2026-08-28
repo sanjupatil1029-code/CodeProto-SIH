@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Compass,
@@ -31,6 +31,13 @@ export default function AppShell({ children, hideProfileBar }: { children: React
   const { user, logout, profile, alerts } = useApp();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
+
   const unread = alerts.filter((a) => !a.read).length;
 
   const handleLogout = () => {
