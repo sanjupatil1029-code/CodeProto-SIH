@@ -92,6 +92,7 @@ async def init_db():
     from app.models.business import Business
     from app.models.rules import DocumentType, ApprovalRule
     from app.models.workflows import BusinessApproval
+    from app.models.document import Document
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
