@@ -7,14 +7,14 @@ from pydantic import BaseModel, Field
 class BusinessBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=255, examples=["Organic Foods Processing Unit"])
     sector: str = Field(..., examples=["FOOD_PROCESSING"])
-    sub_sector: str = Field(..., examples=["DAIRY_PRODUCTS"])
+    sub_sector: str = Field(default="GENERAL", examples=["DAIRY_PRODUCTS"])
     state: str = Field(..., examples=["Maharashtra"])
     district: str = Field(..., examples=["Pune"])
-    city: str = Field(..., examples=["Chinchwad"])
+    city: str = Field(default="DEFAULT", examples=["Chinchwad"])
     investment_amount: float = Field(..., gt=0, description="Investment in INR", examples=[15000000.00])
     employee_count: int = Field(..., gt=0, examples=[45])
     expected_turnover: float = Field(..., gt=0, description="Expected annual turnover in INR", examples=[35000000.00])
-    operational_stage: str = Field(..., examples=["PLANNED"])  # e.g., PLANNED, REGISTERED, OPERATIONAL
+    operational_stage: str = Field(default="PLANNED", examples=["PLANNED"])  # e.g., PLANNED, REGISTERED, OPERATIONAL
     ownership_type: str = Field(default="PRIVATE_LIMITED", examples=["PRIVATE_LIMITED"])  # e.g. PROPRIETORSHIP, PRIVATE_LIMITED, LLP, PARTNERSHIP
     premises_type: str = Field(default="RENTED", examples=["RENTED"])  # e.g. OWNED, RENTED, LEASED, MIDC_PLOT
     flexible_attributes: Dict[str, Any] = Field(default_factory=dict, description="Custom sector-specific parameters")

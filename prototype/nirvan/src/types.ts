@@ -92,6 +92,20 @@ export interface AlertRecord {
   approvalId?: string;
 }
 
+export interface SchemeMatchRecord {
+  id: string;
+  code: string;
+  name: string;
+  department: string;
+  category: "CAPITAL_SUBSIDY" | "INTEREST_SUBVENTION" | "INFRASTRUCTURE_GRANT";
+  matchStatus: "MATCHED" | "CONDITIONAL" | "INELIGIBLE";
+  estimatedBenefit: number;
+  benefitSummary: string;
+  reasons: string[];
+  documents: string[];
+  portalUrl: string;
+}
+
 export interface SchemeDef {
   id: string;
   name: string;

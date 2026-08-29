@@ -1,46 +1,29 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertOctagon,
   AlertTriangle,
   Bell,
   CalendarClock,
-  TrendingDown,
   ShieldCheck,
   Info,
-  FileSpreadsheet,
   CheckCheck,
-  UserCheck,
+  FileText,
+  Clock,
+  Calendar,
+  User,
+  ShieldAlert,
+  ArrowRight,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
-
-interface RenewalAlertItem {
-  approvalId: string;
-  name: string;
-  authority: string;
-  expiryDate: string;
-  daysRemaining: number;
-  status: "UP_TO_DATE" | "RENEWAL_DUE" | "CRITICAL_RENEWAL" | "EXPIRED";
-  reminderThreshold: number;
-}
-
-interface SLABottleneckItem {
-  approvalId: string;
-  name: string;
-  authority: string;
-  startedAt: string;
-  slaDays: number;
-  elapsedDays: number;
-  elapsedPercent: number;
-  slaStatus: "ON_TRACK" | "SLA_WARNING" | "SLA_BREACHED";
-}
-
-interface DepartmentMetrics {
-  authority: string;
-  inProgress: number;
-  breached: number;
-  avgDays: number;
-  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-}
+import { useApp } from "../context/AppContext";
+import {
+  generateDocumentExpiryAlerts,
+  generateScheduledInspections,
+  generateEscalations,
+} from "../data/alertGenerator";
 
 interface NotificationFeedItem {
   id: string;
@@ -52,27 +35,26 @@ interface NotificationFeedItem {
   createdAt: string;
 }
 
-interface AuditLogRecord {
-  id: string;
-  actorRole: string;
-  action: string;
-  resourceType: string;
-  resourceId: string;
-  timestamp: string;
-  oldValue: Record<string, any>;
-  newValue: Record<string, any>;
-}
-
 export default function SmartAlerts() {
-  const [activeTab, setActiveTab] = useState<"notifications" | "renewals" | "sla_bottlenecks" | "audit_logs">("notifications");
+  const { profile, documents, approvalRuntimes } = useApp();
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState<
+    "notifications" | "doc_expirations" | "inspections" | "escalations"
+  >("notifications");
+
+  // Dynamic alert computations
+  const documentExpirations = generateDocumentExpiryAlerts(documents, profile);
+  const scheduledInspections = generateScheduledInspections(profile, approvalRuntimes);
+  const SLAEscalations = generateEscalations(profile, approvalRuntimes);
 
   const [notifications, setNotifications] = useState<NotificationFeedItem[]>([
     {
       id: "n-1",
       eventType: "SLA_BREACHED",
       severity: "CRITICAL",
-      title: "SLA Breached: Fire Safety NOC Application",
-      message: "Fire NOC processing window has exceeded the statutory 15-day SLA deadline. Automatic grievance escalation ticket raised.",
+      title: `SLA Escalation Ticket: ${profile?.companyName || "Enterprise"} Application`,
+      message: `Statutory turnaround SLA window exceeded. Automatic Level-2 Grievance Escalation ticket created for ${profile?.state || "State"} Authority review.`,
       isRead: false,
       createdAt: "2026-08-28 17:45",
     },
@@ -80,104 +62,21 @@ export default function SmartAlerts() {
       id: "n-2",
       eventType: "REGULATION_UPDATED",
       severity: "WARNING",
-      title: "Gazette Update: FSSAI Rule Version 2.0 Deployed",
-      message: "FSSAI License processing window reduced to 15 days under Gazette Notification 2026. Added mandatory Water Quality Test Report requirement.",
+      title: `Statutory Gazette Update: Rules Updated for ${profile?.businessTypeId.toUpperCase() || "Business"} Sector`,
+      message: `Official Gazette 2026 update applied: Fast-Track SLA window enabled. Document checklists updated in system.`,
       isRead: false,
       createdAt: "2026-08-28 16:30",
     },
     {
       id: "n-3",
-      eventType: "DOCUMENT_INVALID",
+      eventType: "DOCUMENT_EXPIRING",
       severity: "WARNING",
-      title: "Document Cross-Mismatch Detected",
-      message: "Rental Agreement address 'Mumbai' mismatches Business Profile location 'Pune'. Affected approvals: FSSAI License, MPCB Consent.",
+      title: "Document Expiration Warning: Premises Agreement",
+      message: "Uploaded Rent/Lease Agreement expires in less than 30 days. Please upload updated lease deed in Document Vault.",
       isRead: true,
       createdAt: "2026-08-28 12:15",
     },
   ]);
-
-  const [auditLogs] = useState<AuditLogRecord[]>([
-    {
-      id: "aud-901",
-      actorRole: "ADMIN",
-      action: "RULE_VERSION_APPROVED",
-      resourceType: "ApprovalRule",
-      resourceId: "FSSAI_LICENSE",
-      timestamp: "2026-08-28 18:36",
-      oldValue: { rule_version: "1.0", sla_days: 30, is_latest: true },
-      newValue: { rule_version: "2.0", sla_days: 15, is_latest: true, added_docs: ["WATER_TEST_REPORT"] },
-    },
-    {
-      id: "aud-902",
-      actorRole: "ENTREPRENEUR",
-      action: "GRIEVANCE_ESCALATED",
-      resourceType: "Grievance",
-      resourceId: "grv-901",
-      timestamp: "2026-08-28 17:45",
-      oldValue: { status: "OPEN", escalation_level: 1 },
-      newValue: { status: "ESCALATED", escalation_level: 2, assigned: "Senior Regional Inspector" },
-    },
-    {
-      id: "aud-903",
-      actorRole: "SYSTEM",
-      action: "DOCUMENT_VALIDATED",
-      resourceType: "Document",
-      resourceId: "d-9912",
-      timestamp: "2026-08-28 14:10",
-      oldValue: { status: "UNVERIFIED" },
-      newValue: { status: "FLAGGED", flags: ["ADDRESS_MISMATCH_PUNE_VS_MUMBAI"] },
-    },
-  ]);
-
-  const renewals: RenewalAlertItem[] = [
-    {
-      approvalId: "fssai-lic",
-      name: "FSSAI Food Business License",
-      authority: "Food Safety and Standards Authority of India (FSSAI)",
-      expiryDate: "2026-09-12",
-      daysRemaining: 15,
-      status: "RENEWAL_DUE",
-      reminderThreshold: 15,
-    },
-    {
-      approvalId: "fire-noc",
-      name: "Fire Safety NOC",
-      authority: "Maharashtra Fire Services Bureau",
-      expiryDate: "2026-09-02",
-      daysRemaining: 5,
-      status: "CRITICAL_RENEWAL",
-      reminderThreshold: 7,
-    },
-  ];
-
-  const slaItems: SLABottleneckItem[] = [
-    {
-      approvalId: "water-consent",
-      name: "Consent to Establish (Water Pollution Control)",
-      authority: "Maharashtra Pollution Control Board (MPCB)",
-      startedAt: "2026-08-03",
-      slaDays: 30,
-      elapsedDays: 25,
-      elapsedPercent: 83.3,
-      slaStatus: "SLA_WARNING",
-    },
-    {
-      approvalId: "fire-noc",
-      name: "Fire Safety NOC",
-      authority: "Maharashtra Fire Services Bureau",
-      startedAt: "2026-07-19",
-      slaDays: 15,
-      elapsedDays: 40,
-      elapsedPercent: 266.7,
-      slaStatus: "SLA_BREACHED",
-    },
-  ];
-
-  const departments: DepartmentMetrics[] = [
-    { authority: "Food Safety & Standards Authority (FSSAI)", inProgress: 1, breached: 0, avgDays: 14.2, riskLevel: "LOW" },
-    { authority: "Maharashtra Fire Services Bureau", inProgress: 2, breached: 1, avgDays: 28.5, riskLevel: "MEDIUM" },
-    { authority: "Maharashtra Pollution Control Board (MPCB)", inProgress: 1, breached: 0, avgDays: 18.0, riskLevel: "LOW" },
-  ];
 
   const markRead = (id: string) => {
     setNotifications(notifications.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
@@ -196,19 +95,49 @@ export default function SmartAlerts() {
           <div className="flex items-center gap-2">
             <Bell size={24} className="text-navy" />
             <h1 className="font-display text-3xl font-extrabold tracking-tight text-navy">
-              Smart Alerts &amp; Notifications
+              Smart Alerts &amp; Monitoring Central
             </h1>
           </div>
           <p className="mt-1 text-sm text-slate-soft">
-            Event-based notifications (Module 16) &amp; Immutable append-only audit trail (Module 17).
+            Real-time Expirations, Scheduled Government Inspections &amp; SLA Escalations.
           </p>
         </div>
 
         <div className="flex items-center gap-2 rounded-xl bg-navy/5 p-2.5 text-xs font-semibold text-navy">
-          <ShieldCheck size={16} className="text-indigo-600" /> Event-Driven Notification Engine
+          <ShieldCheck size={16} className="text-indigo-600" /> Statutory SLA &amp; Expiry Monitor Active
         </div>
       </div>
 
+      {/* Enterprise Context Banner */}
+      {profile && (
+        <div className="mt-6 card p-4 bg-gradient-to-r from-navy/5 via-indigo-50/40 to-white flex flex-wrap items-center justify-between gap-4 border-l-4 border-l-navy">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 flex items-center gap-1">
+              <Sparkles size={13} className="text-indigo-600" /> Active Monitoring Scope
+            </span>
+            <p className="font-display font-bold text-navy text-base mt-0.5">
+              {profile.companyName} <span className="text-xs text-slate-soft font-normal">({profile.businessTypeId.toUpperCase()})</span>
+            </p>
+            <p className="text-xs text-slate-soft">
+              Location: <strong>{profile.cityTaluk || profile.district}, {profile.state}</strong>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <span className="rounded-lg bg-rose-50 px-3 py-1.5 font-bold text-rose-800 border border-rose-200">
+              {documentExpirations.filter((d) => d.status !== "UP_TO_DATE").length} Doc Expirations
+            </span>
+            <span className="rounded-lg bg-amber-50 px-3 py-1.5 font-bold text-amber-800 border border-amber-200">
+              {scheduledInspections.length} Inspections
+            </span>
+            <span className="rounded-lg bg-indigo-50 px-3 py-1.5 font-bold text-indigo-800 border border-indigo-200">
+              {SLAEscalations.length} SLA Escalations
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation Sub-Tabs */}
       <div className="mt-6 flex gap-2 border-b border-navy/[0.08] overflow-x-auto">
         <button
           onClick={() => setActiveTab("notifications")}
@@ -216,39 +145,43 @@ export default function SmartAlerts() {
             activeTab === "notifications" ? "border-navy text-navy" : "border-transparent text-slate-soft hover:text-ink"
           }`}
         >
-          <Bell size={16} /> Module 16: In-App Feed
+          <Bell size={16} /> Notification Feed
           {unreadCount > 0 && (
             <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-extrabold text-white">
               {unreadCount}
             </span>
           )}
         </button>
+
         <button
-          onClick={() => setActiveTab("renewals")}
+          onClick={() => setActiveTab("doc_expirations")}
           className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap ${
-            activeTab === "renewals" ? "border-navy text-navy" : "border-transparent text-slate-soft hover:text-ink"
+            activeTab === "doc_expirations" ? "border-navy text-navy" : "border-transparent text-slate-soft hover:text-ink"
           }`}
         >
-          <CalendarClock size={16} /> Module 10: Renewals
+          <CalendarClock size={16} /> Document Expirations ({documentExpirations.length})
         </button>
+
         <button
-          onClick={() => setActiveTab("sla_bottlenecks")}
+          onClick={() => setActiveTab("inspections")}
           className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap ${
-            activeTab === "sla_bottlenecks" ? "border-navy text-navy" : "border-transparent text-slate-soft hover:text-ink"
+            activeTab === "inspections" ? "border-navy text-navy" : "border-transparent text-slate-soft hover:text-ink"
           }`}
         >
-          <TrendingDown size={16} /> Module 11: SLA Analytics
+          <Calendar size={16} /> Scheduled Inspections ({scheduledInspections.length})
         </button>
+
         <button
-          onClick={() => setActiveTab("audit_logs")}
+          onClick={() => setActiveTab("escalations")}
           className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap ${
-            activeTab === "audit_logs" ? "border-navy text-navy" : "border-transparent text-slate-soft hover:text-ink"
+            activeTab === "escalations" ? "border-navy text-navy" : "border-transparent text-slate-soft hover:text-ink"
           }`}
         >
-          <FileSpreadsheet size={16} /> Module 17: Append-Only Audit Trail
+          <ShieldAlert size={16} /> Escalations &amp; SLA Risks ({SLAEscalations.length})
         </button>
       </div>
 
+      {/* TAB 1: Notifications Feed */}
       {activeTab === "notifications" && (
         <div className="mt-6 space-y-6">
           <div className="flex items-center justify-between">
@@ -303,46 +236,160 @@ export default function SmartAlerts() {
         </div>
       )}
 
-      {activeTab === "audit_logs" && (
+      {/* TAB 2: Document Expirations */}
+      {activeTab === "doc_expirations" && (
         <div className="mt-6 space-y-6">
-          <div className="card p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-base font-bold text-ink flex items-center gap-2">
+                <CalendarClock size={18} className="text-rose-600" /> Uploaded Document Expirations &amp; Validity Tracking
+              </h2>
+              <p className="text-xs text-slate-soft mt-0.5">
+                Automatically monitors expiry dates across your uploaded vault documents (GST, Lease Deeds, Fire NOCs, Trade Licenses).
+              </p>
+            </div>
+
+            <button onClick={() => navigate("/vault")} className="btn-primary py-2 px-4 text-xs flex items-center gap-1.5">
+              <FileText size={14} /> Open Document Vault
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {documentExpirations.map((doc) => {
+              const isCritical = doc.status === "CRITICAL_EXPIRED";
+              const isDue = doc.status === "RENEWAL_DUE";
+
+              return (
+                <div
+                  key={doc.id}
+                  className={`card p-5 border-l-4 ${
+                    isCritical
+                      ? "border-l-rose-600 bg-rose-50/15"
+                      : isDue
+                      ? "border-l-amber-500 bg-amber-50/15"
+                      : "border-l-emerald-500"
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-3 rounded-xl ${isCritical ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
+                        <CalendarClock size={22} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-navy text-base">{doc.docName}</h3>
+                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-700 border border-slate-200">
+                            {doc.docType}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-4 text-xs text-slate-soft">
+                          <span className="flex items-center gap-1 font-semibold text-slate-700">
+                            <Clock size={13} /> Expiry Date: <strong className="text-navy font-mono">{doc.expiryDate}</strong>
+                          </span>
+                          <span className="flex items-center gap-1 font-semibold text-slate-700">
+                            Days Remaining:{" "}
+                            <strong className={doc.daysRemaining <= 10 ? "text-rose-700 font-extrabold" : "text-amber-700 font-extrabold"}>
+                              {doc.daysRemaining} Days
+                            </strong>
+                          </span>
+                        </div>
+
+                        <p className="mt-2 text-xs text-slate-600">
+                          Required for approvals:{" "}
+                          <span className="font-semibold text-navy">
+                            {doc.usedForApprovals.join(", ")}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:items-end gap-2">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-extrabold border ${
+                          isCritical
+                            ? "bg-rose-100 text-rose-900 border-rose-300"
+                            : isDue
+                            ? "bg-amber-100 text-amber-900 border-amber-300"
+                            : "bg-emerald-100 text-emerald-900 border-emerald-300"
+                        }`}
+                      >
+                        {isCritical ? "CRITICAL (Immediate Renewal Required)" : isDue ? "RENEWAL DUE" : "VALID & ACTIVE"}
+                      </span>
+
+                      <button
+                        onClick={() => navigate("/vault")}
+                        className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1"
+                      >
+                        Upload Renewed Copy <ArrowRight size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: Scheduled Inspections */}
+      {activeTab === "inspections" && (
+        <div className="mt-6 space-y-6">
+          <div>
             <h2 className="font-display text-base font-bold text-ink flex items-center gap-2">
-              <FileSpreadsheet size={18} className="text-navy" /> Module 17: Administrative Append-Only Audit Trail
+              <Calendar size={18} className="text-indigo-600" /> Scheduled Government Site Inspections
             </h2>
-            <p className="text-xs text-slate-soft mt-1">
-              Statutory action records are strictly append-only and cannot be altered or deleted. Every state change captures exact old vs new JSON values.
+            <p className="text-xs text-slate-soft mt-0.5">
+              Tracks upcoming physical and digital site audits scheduled by licensing authorities.
             </p>
           </div>
 
           <div className="space-y-4">
-            {auditLogs.map((log) => (
-              <div key={log.id} className="card p-5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-navy px-2 py-0.5 text-[11px] font-bold text-white font-mono">
-                      {log.action}
-                    </span>
-                    <span className="text-xs text-slate-soft font-mono">
-                      {log.resourceType}:{log.resourceId}
-                    </span>
+            {scheduledInspections.map((insp) => (
+              <div key={insp.id} className="card p-5 space-y-4 border-l-4 border-l-indigo-600 bg-indigo-50/10">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-navy text-base">{insp.approvalName} Inspection</h3>
+                      <span className="rounded bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-900 border border-indigo-200">
+                        {insp.inspectionType.replace("_", " ")}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-soft mt-0.5">
+                      Issuing Authority: <strong>{insp.authority}</strong>
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-3 text-xs text-slate-soft">
-                    <span className="flex items-center gap-1">
-                      <UserCheck size={13} /> Role: <strong className="text-ink">{log.actorRole}</strong>
-                    </span>
-                    <span className="font-mono">{log.timestamp}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-xl bg-white p-3 border border-slate-200 text-right">
+                      <span className="text-[11px] text-slate-soft block uppercase font-bold">Inspection Date</span>
+                      <span className="font-display text-base font-extrabold text-indigo-950 flex items-center gap-1">
+                        <Calendar size={15} className="text-indigo-600" /> {insp.inspectionDate}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-3 text-xs">
-                  <div className="bg-rose-50/50 p-3 rounded-lg border border-rose-100 font-mono">
-                    <span className="font-bold text-rose-800 block mb-1">Old State Value (Before):</span>
-                    <pre className="text-[11px] whitespace-pre-wrap">{JSON.stringify(log.oldValue, null, 2)}</pre>
+                <div className="grid sm:grid-cols-2 gap-4 text-xs bg-white p-4 rounded-xl border border-slate-200">
+                  <div>
+                    <span className="text-slate-soft font-bold block mb-1 flex items-center gap-1">
+                      <User size={13} className="text-navy" /> Assigned Inspection Officer:
+                    </span>
+                    <span className="font-bold text-navy">{insp.inspectorName}</span>
                   </div>
-                  <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 font-mono">
-                    <span className="font-bold text-emerald-800 block mb-1">New State Value (After):</span>
-                    <pre className="text-[11px] whitespace-pre-wrap">{JSON.stringify(log.newValue, null, 2)}</pre>
+
+                  <div>
+                    <span className="text-slate-soft font-bold block mb-1 flex items-center gap-1">
+                      <CheckCircle2 size={13} className="text-emerald-600" /> Site Readiness Document Checklist:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {insp.siteChecklist.map((c) => (
+                        <span key={c} className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 border border-slate-200">
+                          ✓ {c}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -351,41 +398,51 @@ export default function SmartAlerts() {
         </div>
       )}
 
-      {activeTab === "renewals" && (
+      {/* TAB 4: Escalations & SLA Risks */}
+      {activeTab === "escalations" && (
         <div className="mt-6 space-y-6">
-          <div className="space-y-4">
-            <h2 className="font-display text-base font-bold text-ink">Upcoming Expiration &amp; Renewal Reminders</h2>
-            {renewals.map((r) => (
-              <div key={r.approvalId} className="card p-5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-ink text-base">{r.name}</h3>
-                    <p className="text-xs text-slate-soft">{r.authority}</p>
-                  </div>
-
-                  <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-800 border border-rose-200">
-                    Critical ({r.daysRemaining} days left)
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div>
+            <h2 className="font-display text-base font-bold text-ink flex items-center gap-2">
+              <ShieldAlert size={18} className="text-rose-600" /> SLA Breach &amp; Statutory Grievance Escalation Control
+            </h2>
+            <p className="text-xs text-slate-soft mt-0.5">
+              Monitors applications exceeding statutory SLA turnaround deadlines. Trigger official escalation tickets directly to Senior Department Directors.
+            </p>
           </div>
-        </div>
-      )}
 
-      {activeTab === "sla_bottlenecks" && (
-        <div className="mt-6 space-y-6">
           <div className="space-y-4">
-            <h2 className="font-display text-base font-bold text-ink">Active Application SLA Velocity</h2>
-            {slaItems.map((item) => (
-              <div key={item.approvalId} className="card p-5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            {SLAEscalations.map((esc) => (
+              <div key={esc.id} className="card p-5 border-l-4 border-l-rose-600 bg-rose-50/20 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-bold text-ink text-base">{item.name}</h3>
-                    <p className="text-xs text-slate-soft">{item.authority}</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-navy text-base">{esc.approvalName}</h3>
+                      <span className="rounded bg-rose-100 px-2.5 py-0.5 text-xs font-extrabold text-rose-900 border border-rose-300">
+                        SLA BREACHED ({esc.elapsedDays} of {esc.slaDays} Days)
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-soft mt-0.5">
+                      Authority: <strong>{esc.authority}</strong> · Escalation Ticket: <strong className="font-mono text-rose-800">{esc.escalationTicketId}</strong>
+                    </p>
                   </div>
-                  <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-extrabold text-rose-900 border border-rose-300">
-                    SLA Breached ({item.elapsedDays} / {item.slaDays} Days)
+
+                  <button
+                    onClick={() => navigate("/grievances")}
+                    className="btn-accent py-2 px-4 text-xs flex items-center gap-1.5"
+                  >
+                    <ShieldAlert size={14} /> Escalate to Appellate Authority
+                  </button>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-rose-200 text-xs flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="text-slate-soft font-bold block">Assigned Appellate Redressal Officer:</span>
+                    <span className="font-bold text-rose-950">{esc.assignedOfficer}</span>
+                  </div>
+
+                  <span className="rounded bg-rose-100 px-3 py-1 font-bold text-rose-900">
+                    Escalation Status: Level-{esc.escalationLevel} Statutory Review Active
                   </span>
                 </div>
               </div>

@@ -1,5 +1,9 @@
+import os
+import re
+import json
 import uuid
-from typing import List, Dict, Any
+import httpx
+from typing import List, Dict, Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
@@ -10,6 +14,7 @@ from app.schemas.scheme import (
     SchemeMatchResultOut,
     BusinessSchemeMatchesResponse,
 )
+from app.core.config import settings
 from app.core.logging import logger
 
 
@@ -107,6 +112,120 @@ class SchemeMatcherService:
             logger.info("Default government incentive schemes seeded successfully.")
 
     @classmethod
+    async def _evaluate_schemes_with_gemini(
+        cls,
+        api_key: str,
+        business: Business
+    ) -> Optional[BusinessSchemeMatchesResponse]:
+        """Query Gemini 2.0 Flash AI API for real, tailored government schemes."""
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+
+        prompt = f"""
+You are NIRVAAN, an expert Indian Government Incentive & Scheme Matcher AI.
+Analyze the following business profile and return ALL applicable real Indian Central & State Government incentive, subsidy, and capital grant schemes tailored specifically to this business:
+
+BUSINESS PROFILE:
+- Business Name: {business.name}
+- Sector / Business Type: {business.sector} ({business.sub_sector})
+- Location: State: {business.state}, District: {business.district}, City: {business.city}
+- Scale: Investment Amount: ₹{business.investment_amount:,.2f}, Employee Count: {business.employee_count}, Expected Turnover: ₹{business.expected_turnover:,.2f}
+- Premises Type: {business.premises_type}
+- Operational Stage: {business.operational_stage}
+- Activity / Description: {json.dumps(business.flexible_attributes)}
+
+INSTRUCTIONS:
+1. Identify 3 to 5 REAL Indian Central or State Government schemes applicable for this specific sector ({business.sector}), location ({business.state}), and investment size.
+2. For each scheme, calculate the realistic estimated benefit amount in INR based on scheme guidelines (e.g. 35% capital subsidy, interest subvention, infrastructure grants).
+3. List 2 to 3 specific eligibility reasons explaining why this business profile qualifies.
+4. List required documents for application (e.g., PAN_CARD, GST_IN, UDYAM_REGISTRATION, PROJECT_REPORT, RENT_AGREEMENT).
+5. Provide official government portal URL.
+
+Return ONLY a valid JSON object matching this structure:
+{{
+  "total_potential_benefit": 7500000.00,
+  "matches": [
+    {{
+      "code": "SCHEME_CODE",
+      "name": "Full Government Scheme Name",
+      "department": "Ministry or Department Name",
+      "category": "CAPITAL_SUBSIDY",
+      "match_status": "MATCHED",
+      "estimated_benefit_amount": 3500000.00,
+      "benefit_summary": "35% Credit-Linked Capital Subsidy up to ₹35 Lakhs...",
+      "eligibility_reasons": ["Sector qualifies under MoFPI central mandate", "Investment amount is within ceiling"],
+      "ineligibility_reasons": [],
+      "required_documents": ["PAN_CARD", "GST_IN", "UDYAM_REGISTRATION"],
+      "official_portal_url": "https://official-portal-url.gov.in"
+    }}
+  ]
+}}
+"""
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [{"text": prompt}]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "response_mime_type": "application/json"
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                text_resp = data["candidates"][0]["content"]["parts"][0]["text"]
+                clean_json = re.sub(r'```json\s*|\s*```', '', text_resp).strip()
+                res_obj = json.loads(clean_json)
+
+                matched_count = 0
+                conditional_count = 0
+                total_benefit = float(res_obj.get("total_potential_benefit", 0.0))
+                matches_out: List[SchemeMatchResultOut] = []
+
+                for m in res_obj.get("matches", []):
+                    status_str = (m.get("match_status") or "MATCHED").upper()
+                    if status_str == "MATCHED":
+                        matched_count += 1
+                    elif status_str == "CONDITIONAL":
+                        conditional_count += 1
+
+                    cat_val = (m.get("category") or "CAPITAL_SUBSIDY").upper()
+                    if cat_val not in ["CAPITAL_SUBSIDY", "INTEREST_SUBVENTION", "INFRASTRUCTURE_GRANT"]:
+                        cat_val = "CAPITAL_SUBSIDY"
+
+                    matches_out.append(
+                        SchemeMatchResultOut(
+                            scheme_id=uuid.uuid4(),
+                            code=m.get("code", "SCHEME_CODE"),
+                            name=m.get("name", "Government Incentive Scheme"),
+                            department=m.get("department", "Government Ministry"),
+                            category=cat_val,
+                            match_status=status_str,
+                            eligibility_reasons=m.get("eligibility_reasons", []),
+                            ineligibility_reasons=m.get("ineligibility_reasons", []),
+                            estimated_benefit_amount=float(m.get("estimated_benefit_amount", 0.0)),
+                            benefit_summary=m.get("benefit_summary", ""),
+                            required_documents=m.get("required_documents", []),
+                            official_portal_url=m.get("official_portal_url", "https://india.gov.in")
+                        )
+                    )
+
+                logger.info(f"Gemini 2.0 Flash AI successfully evaluated {len(matches_out)} real schemes for business {business.id}")
+                return BusinessSchemeMatchesResponse(
+                    business_id=business.id,
+                    total_schemes_evaluated=len(matches_out),
+                    matched_count=matched_count,
+                    conditional_count=conditional_count,
+                    total_potential_benefit=round(total_benefit, 2),
+                    matches=matches_out
+                )
+        return None
+
+    @classmethod
     async def match_schemes_for_business(
         cls,
         db: AsyncSession,
@@ -115,6 +234,7 @@ class SchemeMatcherService:
         """
         Evaluate all active government schemes against a business profile,
         returning eligibility matches, reasons, estimated subsidy benefit amounts, and document checklists.
+        Uses Gemini 2.0 Flash AI model when API key is available.
         """
         # Ensure default schemes are seeded
         await cls.seed_default_schemes(db)
@@ -126,6 +246,17 @@ class SchemeMatcherService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Business profile not found"
             )
+
+        # 1. Attempt Gemini 2.0 Flash AI evaluation
+        raw_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
+        api_key = raw_key.split(",")[0].strip() if raw_key else ""
+        if api_key:
+            try:
+                gemini_res = await cls._evaluate_schemes_with_gemini(api_key, business)
+                if gemini_res and len(gemini_res.matches) > 0:
+                    return gemini_res
+            except Exception as e:
+                logger.warning(f"Gemini AI scheme evaluation fallback to rule engine: {str(e)}")
 
         schemes_res = await db.execute(select(Scheme).where(Scheme.is_active == True))
         schemes = list(schemes_res.scalars().all())

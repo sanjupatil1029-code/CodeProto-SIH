@@ -126,6 +126,9 @@ export default function DocumentVault() {
     },
   ]);
 
+  const isJewelry = profile?.businessTypeId === "jewelry";
+  const isFood = profile?.businessTypeId === "food" || profile?.businessTypeId === "sugar";
+
   // Simulated Cross-Document Inconsistencies
   const inconsistencies: InconsistencyAlert[] = [
     {
@@ -135,7 +138,11 @@ export default function DocumentVault() {
       title: "Address Mismatch between Business Profile & Rental Agreement",
       expected: `${profile?.cityTaluk || profile?.city || "Pune"}, ${profile?.state || "Maharashtra"} (Business Profile)`,
       actual: "Bandra Kurla Complex, Mumbai (Rental Agreement)",
-      affectedApprovals: ["FSSAI_LICENSE", "FIRE_SAFETY_NOC", "WATER_CONSENT", "LOCAL_MUNICIPAL_NOC"],
+      affectedApprovals: isJewelry
+        ? ["BIS_HALLMARKING_REG", "SHOP_ESTABLISHMENT", "MUNICIPAL_TRADE_LICENCE", "GST_REGISTRATION"]
+        : isFood
+        ? ["FSSAI_LICENSE", "FIRE_SAFETY_NOC", "WATER_CONSENT", "LOCAL_MUNICIPAL_NOC"]
+        : ["SHOP_ESTABLISHMENT", "MUNICIPAL_TRADE_LICENCE", "GST_REGISTRATION"],
     },
   ];
 

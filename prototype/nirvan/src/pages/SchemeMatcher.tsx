@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Award,
@@ -11,123 +11,77 @@ import {
   CheckCircle2,
   FileCheck,
   ExternalLink,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { useApp } from "../context/AppContext";
+import { getRuleVersionsForProfile } from "../data/ruleVersions";
+import type { SchemeMatchRecord } from "../types";
 
-interface SchemeMatchRecord {
-  id: string;
-  code: string;
-  name: string;
-  department: string;
-  category: "CAPITAL_SUBSIDY" | "INTEREST_SUBVENTION" | "INFRASTRUCTURE_GRANT";
-  matchStatus: "MATCHED" | "CONDITIONAL" | "INELIGIBLE";
-  estimatedBenefit: number;
-  benefitSummary: string;
-  reasons: string[];
-  documents: string[];
-  portalUrl: string;
-}
-
-interface RuleVersionRecord {
-  ruleCode: string;
-  name: string;
-  version: string;
-  status: "ACTIVE" | "SUPERSEDED";
-  isLatest: boolean;
-  effectiveFrom: string;
-  effectiveTo?: string;
-  slaDays: number;
-  changeSummary: string;
-}
+const DEFAULT_DEMO_SCHEMES: SchemeMatchRecord[] = [
+  {
+    id: "sch-1",
+    code: "PMKSY_INFRASTRUCTURE_GRANT",
+    name: "Pradhan Mantri Kisan SAMPADA Yojana (PMKSY) Infrastructure Grant",
+    department: "Ministry of Food Processing Industries (MoFPI)",
+    category: "INFRASTRUCTURE_GRANT",
+    matchStatus: "MATCHED",
+    estimatedBenefit: 5000000.0,
+    benefitSummary: "35% to 50% Capital Grant up to ₹50 Lakhs for creation of cold chain & food processing clusters.",
+    reasons: [
+      "Sector 'FOOD_PROCESSING' qualifies under MoFPI central mandate.",
+      "State 'Maharashtra' qualifies under national scheme jurisdiction.",
+      "Project Investment ₹3.50 Crores meets minimum threshold of ₹2.00 Crores.",
+    ],
+    documents: ["PAN_CARD", "GST_IN", "RENT_AGREEMENT", "CHARTERED_ACCOUNTANT_CERTIFICATE", "DETAILED_PROJECT_REPORT"],
+    portalUrl: "https://mofpi.gov.in/pmksy",
+  },
+  {
+    id: "sch-2",
+    code: "MAHA_PSI_CAPITAL_INCENTIVE",
+    name: "Maharashtra Package Scheme of Incentives (PSI 2026) - Food Processing",
+    department: "Industries Department, Government of Maharashtra / MAITRI",
+    category: "INTEREST_SUBVENTION",
+    matchStatus: "MATCHED",
+    estimatedBenefit: 2500000.0,
+    benefitSummary: "5% Interest Subvention for 5 years + Electricity Duty Exemption for MIDC/Industrial area units.",
+    reasons: [
+      "Located in MAHARASHTRA state industrial zone.",
+      "MIDC Bhosari industrial plot premises qualifies for regional incentive bonus.",
+    ],
+    documents: ["PAN_CARD", "RENT_AGREEMENT", "ELECTRICITY_BILL", "MAITRI_REGISTRATION_CERT"],
+    portalUrl: "https://maitri.mahaonline.gov.in",
+  },
+  {
+    id: "sch-3",
+    code: "MSME_INTEREST_SUBVENTION",
+    name: "Central MSME Credit & Interest Subvention Scheme",
+    department: "Ministry of Micro, Small & Medium Enterprises (MSME)",
+    category: "INTEREST_SUBVENTION",
+    matchStatus: "MATCHED",
+    estimatedBenefit: 500000.0,
+    benefitSummary: "2% Interest Subvention on fresh or incremental working capital loans up to ₹1 Crore.",
+    reasons: ["MSME turnover within ₹5.00 Crore ceiling.", "Registered Private Limited entity."],
+    documents: ["PAN_CARD", "UDYAM_REGISTRATION", "BANK_LOAN_SANCTION"],
+    portalUrl: "https://udyamregistration.gov.in",
+  },
+];
 
 export default function SchemeMatcher() {
-  const { profile } = useApp();
+  const { profile, schemes: appSchemes, loadingSchemes, evaluateSchemes } = useApp();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"schemes" | "regulatory_versions">("schemes");
 
-  const [schemes] = useState<SchemeMatchRecord[]>([
-    {
-      id: "sch-1",
-      code: "PMKSY_INFRASTRUCTURE_GRANT",
-      name: "Pradhan Mantri Kisan SAMPADA Yojana (PMKSY) Infrastructure Grant",
-      department: "Ministry of Food Processing Industries (MoFPI)",
-      category: "INFRASTRUCTURE_GRANT",
-      matchStatus: "MATCHED",
-      estimatedBenefit: 5000000.0,
-      benefitSummary: "35% to 50% Capital Grant up to ₹50 Lakhs for creation of cold chain & food processing clusters.",
-      reasons: [
-        "Sector 'FOOD_PROCESSING' qualifies under MoFPI central mandate.",
-        "State 'Maharashtra' qualifies under national scheme jurisdiction.",
-        "Project Investment ₹3.50 Crores meets minimum threshold of ₹2.00 Crores.",
-      ],
-      documents: ["PAN_CARD", "GST_IN", "RENT_AGREEMENT", "CHARTERED_ACCOUNTANT_CERTIFICATE", "DETAILED_PROJECT_REPORT"],
-      portalUrl: "https://mofpi.gov.in/pmksy",
-    },
-    {
-      id: "sch-2",
-      code: "MAHA_PSI_CAPITAL_INCENTIVE",
-      name: "Maharashtra Package Scheme of Incentives (PSI 2026) - Food Processing",
-      department: "Industries Department, Government of Maharashtra / MAITRI",
-      category: "INTEREST_SUBVENTION",
-      matchStatus: "MATCHED",
-      estimatedBenefit: 2500000.0,
-      benefitSummary: "5% Interest Subvention for 5 years + Electricity Duty Exemption for MIDC/Industrial area units.",
-      reasons: [
-        "Located in MAHARASHTRA state industrial zone.",
-        "MIDC Bhosari industrial plot premises qualifies for regional incentive bonus.",
-      ],
-      documents: ["PAN_CARD", "RENT_AGREEMENT", "ELECTRICITY_BILL", "MAITRI_REGISTRATION_CERT"],
-      portalUrl: "https://maitri.mahaonline.gov.in",
-    },
-    {
-      id: "sch-3",
-      code: "MSME_INTEREST_SUBVENTION",
-      name: "Central MSME Credit & Interest Subvention Scheme",
-      department: "Ministry of Micro, Small & Medium Enterprises (MSME)",
-      category: "INTEREST_SUBVENTION",
-      matchStatus: "MATCHED",
-      estimatedBenefit: 500000.0,
-      benefitSummary: "2% Interest Subvention on fresh or incremental working capital loans up to ₹1 Crore.",
-      reasons: ["MSME turnover within ₹5.00 Crore ceiling.", "Registered Private Limited entity."],
-      documents: ["PAN_CARD", "UDYAM_REGISTRATION", "BANK_LOAN_SANCTION"],
-      portalUrl: "https://udyamregistration.gov.in",
-    },
-  ]);
+  // Auto-evaluate schemes if user has a profile but no schemes evaluated yet
+  useEffect(() => {
+    if (profile && (!appSchemes || appSchemes.length === 0)) {
+      evaluateSchemes();
+    }
+  }, [profile]);
 
-  const [ruleVersions] = useState<RuleVersionRecord[]>([
-    {
-      ruleCode: "FSSAI_LICENSE",
-      name: "FSSAI Food Business License",
-      version: "2.0",
-      status: "ACTIVE",
-      isLatest: true,
-      effectiveFrom: "2026-08-28",
-      slaDays: 15,
-      changeSummary: "Updated via Official Gazette Notification 2026: Fast-Track SLA reduced from 30d to 15d; added mandatory Water Quality Test Report.",
-    },
-    {
-      ruleCode: "FSSAI_LICENSE",
-      name: "FSSAI Food Business License",
-      version: "1.0",
-      status: "SUPERSEDED",
-      isLatest: false,
-      effectiveFrom: "2025-01-01",
-      effectiveTo: "2026-08-28",
-      slaDays: 30,
-      changeSummary: "Initial statutory baseline rule definition.",
-    },
-    {
-      ruleCode: "FIRE_NOC",
-      name: "Fire Safety NOC (Maharashtra Fire Services)",
-      version: "1.0",
-      status: "ACTIVE",
-      isLatest: true,
-      effectiveFrom: "2025-01-01",
-      slaDays: 15,
-      changeSummary: "Active Maharashtra Fire Prevention & Life Safety Act rule version.",
-    },
-  ]);
+  const schemes = appSchemes && appSchemes.length > 0 ? appSchemes : DEFAULT_DEMO_SCHEMES;
+  const ruleVersions = getRuleVersionsForProfile(profile);
 
   if (!profile) {
     return (
@@ -186,19 +140,46 @@ export default function SchemeMatcher() {
           <div className="card p-6 border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-50/50 to-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase tracking-wide text-emerald-800 flex items-center gap-1.5">
-                <Sparkles size={16} className="text-emerald-600" /> Total Estimated Subsidy Benefit Matched
+                <Sparkles size={16} className="text-emerald-600 animate-pulse" /> Gemini 2.0 Flash AI Scheme Evaluator
               </span>
               <p className="text-3xl font-extrabold text-navy mt-1">
                 ₹{(totalBenefit / 100000).toFixed(2)} Lakhs
               </p>
               <p className="text-xs text-slate-soft mt-0.5">
-                {schemes.length} Government Schemes matched for {profile.companyName} ({profile.sector || profile.businessTypeId}).
+                {schemes.length} Real Government Schemes matched for <strong>{profile.companyName}</strong> ({profile.sector || profile.businessTypeId}, {profile.state}).
               </p>
             </div>
-            <button className="btn-primary !bg-emerald-600 hover:!bg-emerald-700 text-xs">
-              Apply via Single Window Gateway
-            </button>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => evaluateSchemes()}
+                disabled={loadingSchemes}
+                className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {loadingSchemes ? (
+                  <Loader2 size={14} className="animate-spin text-navy" />
+                ) : (
+                  <RefreshCw size={14} className="text-navy" />
+                )}
+                {loadingSchemes ? "Querying Gemini AI..." : "Re-evaluate with Gemini AI"}
+              </button>
+              <button className="btn-primary !bg-emerald-600 hover:!bg-emerald-700 text-xs">
+                Apply via Single Window Gateway
+              </button>
+            </div>
           </div>
+
+          {loadingSchemes && (
+            <div className="card p-8 text-center bg-indigo-50/30 border border-indigo-100 animate-pulse flex flex-col items-center justify-center gap-3">
+              <Loader2 size={28} className="animate-spin text-indigo-600" />
+              <div>
+                <p className="font-bold text-navy text-sm">Querying Gemini 2.0 Flash AI API...</p>
+                <p className="text-xs text-slate-soft mt-0.5">
+                  Analyzing {profile.companyName}'s sector ({profile.sector || profile.businessTypeId}), location ({profile.state}, {profile.district}), and investment scale against real Central &amp; State government incentive databases.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4">
             {schemes.map((s) => (
@@ -234,7 +215,7 @@ export default function SchemeMatcher() {
                       <ListChecks size={14} className="text-navy" /> Why Your Profile Qualifies:
                     </h4>
                     <ul className="space-y-1 text-slate-700">
-                      {s.reasons.map((r, i) => (
+                      {s.reasons.map((r: string, i: number) => (
                         <li key={i} className="flex items-start gap-1.5">
                           <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0 mt-0.5" />
                           <span>{r}</span>
@@ -248,7 +229,7 @@ export default function SchemeMatcher() {
                       <FileCheck size={14} className="text-navy" /> Scheme Document Checklist:
                     </h4>
                     <div className="flex flex-wrap gap-1.5">
-                      {s.documents.map((d) => (
+                      {s.documents.map((d: string) => (
                         <span key={d} className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-mono text-slate-700 border border-slate-200">
                           {d}
                         </span>

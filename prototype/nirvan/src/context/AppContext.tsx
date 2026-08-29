@@ -5,8 +5,10 @@ import type {
   ApprovalStatus,
   DocumentRecord,
   AlertRecord,
+  SchemeMatchRecord,
 } from "../types";
 import { getApplicableApprovals } from "../data/approvals";
+import { evaluateSchemesWithGemini } from "../services/geminiSchemes";
 import * as api from "../services/api";
 
 interface User {
@@ -37,17 +39,38 @@ interface AppState {
   alerts: AlertRecord[];
   markAlertRead: (id: string) => void;
 
+  schemes: SchemeMatchRecord[];
+  loadingSchemes: boolean;
+  evaluateSchemes: (targetProfile?: ProjectProfile) => Promise<void>;
+
   resetProject: () => void;
   syncBackendState: () => Promise<void>;
 }
 
 const AppCtx = createContext<AppState | null>(null);
 
-const STORAGE_KEY = "NIRVAAN_state_v1";
+const CURRENT_USER_KEY = "NIRVAAN_current_user";
 
-function loadState() {
+function getUserStorageKey(email?: string | null): string {
+  if (!email) return "NIRVAAN_state_guest";
+  return `NIRVAAN_state_${email.toLowerCase().trim()}`;
+}
+
+function loadSavedUser(): User | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(CURRENT_USER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function loadSavedStateForUser(user: User | null) {
+  if (!user?.email) return null;
+  try {
+    const key = getUserStorageKey(user.email);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -81,49 +104,172 @@ function seedAlerts(): AlertRecord[] {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const persisted = loadState();
+  const initialUser = loadSavedUser();
+  const initialSaved = loadSavedStateForUser(initialUser);
 
-  const [user, setUser] = useState<User | null>(persisted?.user ?? null);
-  const [category, setCategory] = useState<"shop" | "industry" | null>(persisted?.category ?? null);
-  const [profile, setProfileState] = useState<ProjectProfile | null>(persisted?.profile ?? null);
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [category, setCategory] = useState<"shop" | "industry" | null>(initialSaved?.category ?? null);
+  const [profile, setProfileState] = useState<ProjectProfile | null>(initialSaved?.profile ?? null);
   const [approvalRuntimes, setApprovalRuntimes] = useState<Record<string, ApprovalRuntime>>(
-    persisted?.approvalRuntimes ?? {}
+    initialSaved?.approvalRuntimes ?? {}
   );
-  const [documents, setDocuments] = useState<DocumentRecord[]>(persisted?.documents ?? []);
-  const [alerts, setAlerts] = useState<AlertRecord[]>(persisted?.alerts ?? seedAlerts());
+  const [documents, setDocuments] = useState<DocumentRecord[]>(initialSaved?.documents ?? []);
+  const [alerts, setAlerts] = useState<AlertRecord[]>(initialSaved?.alerts ?? seedAlerts());
 
+  const [schemes, setSchemes] = useState<SchemeMatchRecord[]>(initialSaved?.schemes ?? []);
+  const [loadingSchemes, setLoadingSchemes] = useState<boolean>(false);
+
+  // Save active user and user progress whenever state updates
   useEffect(() => {
     try {
-      const lightDocuments = documents.map(({ photoUrl, ...rest }) => rest);
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user, category, profile, approvalRuntimes, documents: lightDocuments, alerts })
-      );
+      if (user) {
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+        const lightDocuments = documents.map(({ photoUrl, ...rest }) => rest);
+        const storageKey = getUserStorageKey(user.email);
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({ user, category, profile, approvalRuntimes, documents: lightDocuments, alerts, schemes })
+        );
+      } else {
+        localStorage.removeItem(CURRENT_USER_KEY);
+      }
     } catch (err) {
-      console.warn("Could not persist app state to localStorage:", err);
+      console.warn("Could not persist user progress to localStorage:", err);
     }
-  }, [user, category, profile, approvalRuntimes, documents, alerts]);
+  }, [user, category, profile, approvalRuntimes, documents, alerts, schemes]);
+
+  // Sync state from backend when user has an active business profile
+  const restoreBackendState = async (activeUser?: User | null) => {
+    const currUser = activeUser || user;
+    if (!currUser) return;
+
+    try {
+      const businesses = await api.getUserBusinesses();
+      if (Array.isArray(businesses) && businesses.length > 0) {
+        const biz = businesses[0];
+        const restoredProfile: ProjectProfile = {
+          id: biz.id,
+          companyName: biz.name,
+          businessTypeId: (biz.sector || "").toLowerCase(),
+          sector: biz.sector,
+          state: biz.state,
+          district: biz.district,
+          cityTaluk: biz.city || biz.district,
+          size: biz.investment_amount > 50000000 ? "Large" : biz.investment_amount > 10000000 ? "Medium" : "Small",
+          projectType: (biz.operational_stage as any) || "New Setup",
+          employees: biz.employee_count,
+          activity: biz.flexible_attributes?.activity || biz.sector,
+          investmentAmount: biz.investment_amount,
+          expectedTurnover: biz.expected_turnover,
+          premisesType: biz.premises_type,
+        };
+        setProfileState(restoredProfile);
+
+        const isShop = biz.sector.toLowerCase().includes("jewel") || biz.sector.toLowerCase().includes("shop");
+        setCategory(isShop ? "shop" : "industry");
+
+        // Restore roadmap
+        let roadmap: any[] = [];
+        try {
+          roadmap = await api.getRoadmap(biz.id);
+          if (!Array.isArray(roadmap) || roadmap.length === 0) {
+            roadmap = await api.generateRoadmap(biz.id);
+          }
+        } catch {
+          roadmap = await api.generateRoadmap(biz.id);
+        }
+
+        if (Array.isArray(roadmap) && roadmap.length > 0) {
+          const runtimes: Record<string, ApprovalRuntime> = {};
+          roadmap.forEach((r) => {
+            const approvalId = r.rule_code || r.id;
+            runtimes[approvalId] = {
+              approvalId,
+              status: (r.status.toLowerCase() as ApprovalStatus) || "not_started",
+              progressDays: r.sla_elapsed_percent || 0,
+              documentsReady: r.status === "READY" || r.status === "APPROVED",
+            };
+          });
+          setApprovalRuntimes((prev) => ({ ...runtimes, ...prev }));
+        }
+
+        // Restore documents
+        try {
+          const bizDocs = await api.getBusinessDocuments(biz.id);
+          if (Array.isArray(bizDocs) && bizDocs.length > 0) {
+            const restoredDocs: DocumentRecord[] = bizDocs.map((d) => ({
+              id: d.id,
+              name: d.file_name || d.document_type,
+              status: d.verification_status === "VERIFIED" ? "verified" : "pending",
+              uploadedOn: d.uploaded_at ? d.uploaded_at.split("T")[0] : new Date().toISOString().split("T")[0],
+              expiry: d.expiry_date || null,
+              usedFor: ["biz-reg"],
+              fileNameOnRecord: biz.name,
+              flags: d.ai_flags || [],
+            }));
+            setDocuments((prev) => {
+              const existingIds = new Set(prev.map((p) => p.id));
+              const newDocs = restoredDocs.filter((rd) => !existingIds.has(rd.id));
+              return [...newDocs, ...prev];
+            });
+          }
+        } catch (err) {
+          console.warn("Could not fetch business documents:", err);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not restore state from backend:", err);
+    }
+  };
+
+  // Sync from backend on initial mount if authenticated
+  useEffect(() => {
+    if (user && localStorage.getItem("NIRVAAN_token")) {
+      restoreBackendState(user);
+    }
+  }, []);
 
   const login = async (email: string, name?: string, password?: string) => {
+    let loggedUser: User;
+
     if (password) {
       const res = await api.loginUser(email, password);
       api.setToken(res.tokens.access_token);
-      
-      // Clear stale mock project profiles from previous local sessions
+      try {
+        const me = await api.getCurrentUser();
+        loggedUser = { id: me.id, email: me.email, name: me.full_name || res.user.full_name || name || email.split("@")[0] };
+      } catch {
+        loggedUser = { id: res.user.id, email: res.user.email, name: res.user.full_name || name || email.split("@")[0] };
+      }
+    } else {
+      loggedUser = { email, name: name || email.split("@")[0] };
+    }
+
+    setUser(loggedUser);
+
+    // 1. Restore local saved progress for this user
+    const saved = loadSavedStateForUser(loggedUser);
+    if (saved) {
+      setCategory(saved.category ?? null);
+      setProfileState(saved.profile ?? null);
+      setApprovalRuntimes(saved.approvalRuntimes ?? {});
+      setDocuments(saved.documents ?? []);
+      setAlerts(saved.alerts ?? seedAlerts());
+      if (saved.schemes) setSchemes(saved.schemes);
+    } else {
+      // Reset if no saved session for new local user
       setCategory(null);
       setProfileState(null);
       setApprovalRuntimes({});
       setDocuments([]);
-
-      try {
-        const me = await api.getCurrentUser();
-        setUser({ id: me.id, email: me.email, name: me.full_name || res.user.full_name || name || email.split("@")[0] });
-      } catch {
-        setUser({ id: res.user.id, email: res.user.email, name: res.user.full_name || name || email.split("@")[0] });
-      }
-      return;
+      setAlerts(seedAlerts());
+      setSchemes([]);
     }
-    setUser({ email, name: name || email.split("@")[0] });
+
+    // 2. Restore backend progress if logged into backend server
+    if (password || localStorage.getItem("NIRVAAN_token")) {
+      await restoreBackendState(loggedUser);
+    }
   };
 
   const register = async (email: string, password: string, name: string) => {
@@ -132,38 +278,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     api.removeToken();
+    localStorage.removeItem(CURRENT_USER_KEY);
     setUser(null);
     setCategory(null);
     setProfileState(null);
     setApprovalRuntimes({});
     setDocuments([]);
+    setAlerts(seedAlerts());
+    setSchemes([]);
   };
 
   const syncBackendState = async () => {
-    if (!profile?.id) return;
+    await restoreBackendState();
+  };
+
+  const evaluateSchemes = async (targetProfile?: ProjectProfile) => {
+    const profToUse = targetProfile || profile;
+    if (!profToUse) return;
+    setLoadingSchemes(true);
     try {
-      const roadmap = await api.getRoadmap(profile.id);
-      if (Array.isArray(roadmap) && roadmap.length > 0) {
-        const runtimes: Record<string, ApprovalRuntime> = {};
-        roadmap.forEach((r) => {
-          runtimes[r.rule_code || r.id] = {
-            approvalId: r.rule_code || r.id,
-            status: (r.status.toLowerCase() as ApprovalStatus) || "not_started",
-            progressDays: r.sla_elapsed_percent || 0,
-            documentsReady: r.status === "READY" || r.status === "APPROVED",
-          };
-        });
-        setApprovalRuntimes(runtimes);
-      }
+      const evalSchemes = await evaluateSchemesWithGemini(profToUse);
+      setSchemes(evalSchemes);
     } catch (err) {
-      console.warn("Failed to sync backend state:", err);
+      console.warn("Gemini scheme evaluation failed:", err);
+    } finally {
+      setLoadingSchemes(false);
     }
   };
 
   const setProfile = async (p: ProjectProfile) => {
     setProfileState(p);
-    
-    // Attempt backend sync
+
+    // Evaluate real schemes tailored to user profile input using Gemini AI API
+    evaluateSchemes(p);
+
+    // Attempt backend creation/sync
     try {
       const locStr = p.location || `${p.state},${p.district}`;
       const parts = locStr.split(",");
@@ -281,6 +430,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setProfileState(null);
     setApprovalRuntimes({});
     setDocuments([]);
+    setSchemes([]);
   };
 
   const value = useMemo(
@@ -300,10 +450,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addDocument,
       alerts,
       markAlertRead,
+      schemes,
+      loadingSchemes,
+      evaluateSchemes,
       resetProject,
       syncBackendState,
     }),
-    [user, category, profile, approvalRuntimes, documents, alerts]
+    [user, category, profile, approvalRuntimes, documents, alerts, schemes, loadingSchemes]
   );
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
@@ -314,3 +467,4 @@ export function useApp() {
   if (!ctx) throw new Error("useApp must be used within AppProvider");
   return ctx;
 }
+

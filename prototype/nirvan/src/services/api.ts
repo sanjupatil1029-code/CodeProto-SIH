@@ -116,10 +116,21 @@ export async function createBusiness(payload: {
   ownership_type?: string;
   premises_type?: string;
 }) {
-  return request<any>("/businesses/create", {
+  return request<any>("/businesses/", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      sub_sector: "GENERAL",
+      city: payload.city || payload.district || "DEFAULT",
+      operational_stage: "PLANNED",
+      ownership_type: "PROPRIETORSHIP",
+      premises_type: "RENTED",
+      ...payload,
+    }),
   });
+}
+
+export async function getUserBusinesses() {
+  return request<any[]>("/businesses/");
 }
 
 export async function getBusiness(businessId: string) {
